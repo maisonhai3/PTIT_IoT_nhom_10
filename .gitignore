@@ -1,0 +1,20 @@
+# secrets
+firmware/include/secrets.h
+backend/.env
+*.env
+!*.env.example
+
+# firmware
+firmware/.pio/
+.vscode/
+
+# backend
+backend/bin/
+backend/*.db
+backend/*.db-*
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+.DS_Store

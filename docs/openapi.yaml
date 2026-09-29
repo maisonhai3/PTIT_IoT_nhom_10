@@ -1,0 +1,146 @@
+openapi: 3.0.3
+info:
+  title: Awning Controller API
+  version: 0.1.0
+  description: |
+    Backend API cho hệ thống giàn phơi thông minh.
+    Đây là **contract** giữa backend (Go) và front-end. Đổi contract => báo cả hai bên.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/state:
+    get:
+      summary: Trạng thái hiện tại của giàn và cảm biến
+      operationId: getState
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/State" }
+  /api/command:
+    post:
+      summary: Gửi lệnh điều khiển xuống ESP32
+      operationId: postCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Command" }
+      responses:
+        "202":
+          description: Lệnh đã được gửi (chưa chắc thiết bị đã thực thi; theo dõi qua /api/state hoặc /ws)
+        "400":
+          description: Lệnh không hợp lệ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Thiết bị đang offline
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/weather:
+    get:
+      summary: Thời tiết hiện tại và dự báo ngắn hạn
+      operationId: getWeather
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Weather" }
+        "503":
+          description: Chưa lấy được dữ liệu thời tiết
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/history:
+    get:
+      summary: Lịch sử telemetry
+      operationId: getHistory
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Telemetry" }
+  /ws:
+    get:
+      summary: WebSocket đẩy realtime
+      description: |
+        Upgrade sang WebSocket. Server gửi các message dạng
+        `{"type":"state","data":<State>}` hoặc `{"type":"weather","data":<Weather>}`
+        mỗi khi dữ liệu thay đổi. Client không cần gửi gì.
+      responses:
+        "101":
+          description: Switching Protocols
+components:
+  schemas:
+    AwningState:
+      type: string
+      enum: [OPEN, CLOSING, CLOSED, OPENING, ERROR]
+    Mode:
+      type: string
+      enum: [AUTO, MANUAL]
+    RainSource:
+      type: string
+      description: "api = mưa theo Open-Meteo, sim = đang giả lập mưa, none = không mưa"
+      enum: [api, sim, none]
+    Telemetry:
+      type: object
+      required: [ts, temp, humidity, light, state, mode]
+      properties:
+        ts: { type: string, format: date-time }
+        temp: { type: number, description: "°C (DHT11)" }
+        humidity: { type: number, description: "% RH (DHT11)" }
+        light: { type: integer, minimum: 0, maximum: 4095, description: "ADC thô của LDR; cao = sáng" }
+        state: { $ref: "#/components/schemas/AwningState" }
+        mode: { $ref: "#/components/schemas/Mode" }
+        rain_source: { $ref: "#/components/schemas/RainSource" }
+        weather_age_s: { type: integer, description: "Tuổi bản tin thời tiết ESP32 đang dùng (giây)" }
+    State:
+      type: object
+      required: [online, telemetry]
+      properties:
+        online: { type: boolean, description: "false nếu ESP32 mất kết nối (LWT)" }
+        last_seen: { type: string, format: date-time }
+        telemetry: { $ref: "#/components/schemas/Telemetry" }
+    Command:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [open, close, auto, simulate_rain, clear_rain]
+    Weather:
+      type: object
+      required: [fetched_at, temperature_c, precipitation_mm, is_raining, description]
+      properties:
+        fetched_at: { type: string, format: date-time }
+        temperature_c: { type: number }
+        humidity: { type: number }
+        precipitation_mm: { type: number }
+        is_raining: { type: boolean }
+        weather_code: { type: integer, description: "WMO code từ Open-Meteo" }
+        description: { type: string }
+        rain_expected_15m: { type: boolean, description: "Dự báo có mưa trong 15 phút tới" }
+        forecast:
+          type: array
+          items:
+            type: object
+            properties:
+              time: { type: string, format: date-time }
+              precipitation_probability: { type: integer }
+              precipitation_mm: { type: number }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
