@@ -1,6 +1,7 @@
 # MQTT topics
 
-Broker: HiveMQ Cloud (TLS, port 8883). Prefix mọi topic: `pkg/awning01/`.
+Broker: Mosquitto chạy local bằng Docker (`deploy/`), port 1883, **không TLS** (chỉ dùng trong LAN, không đưa ra Internet).
+Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi topic: `pkg/awning01/`.
 
 | Topic | Chiều | QoS | Retained | Payload |
 |---|---|---|---|---|

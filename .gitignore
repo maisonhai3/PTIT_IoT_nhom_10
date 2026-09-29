@@ -4,6 +4,8 @@ backend/.env
 *.env
 !*.env.example
 
+deploy/mosquitto/passwd
+
 # firmware
 firmware/.pio/
 .vscode/
