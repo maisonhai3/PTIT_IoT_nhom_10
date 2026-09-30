@@ -1,5 +1,11 @@
 # Sơ đồ nối dây (ESP32 DEVKIT V1, 30 chân)
 
+**Sơ đồ hình toàn mạch (30 dây, chia 7 giai đoạn):** [`wiring-diagram.svg`](wiring-diagram.svg) (bản PNG: [`wiring-diagram.png`](wiring-diagram.png)).
+Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở và thứ tự NO/COM/NC của relay trong hình là giả định
+(tài liệu kit không ghi): luôn đọc nhãn in trên module.
+
+![Sơ đồ đi dây toàn mạch](wiring-diagram.svg)
+
 Nguồn đối chiếu: tài liệu của kit (`LontenTechnology/ESP32_Basic_Starter_Kit_LTARK_8`, file *ESP32 Basic Starter Kit.pdf*).
 Tài liệu xác nhận: board DEVKIT V1 (CP2102), relay 2 kênh **kích mức thấp** (chân IN xuống dưới ~2 V thì relay hút, kit dùng GPIO 26 và 27),
 DHT11 dạng module ở GPIO 4, OLED **SSD1306 128x64** I2C địa chỉ **0x3C** (SDA = GPIO 21, SCL = GPIO 22).
