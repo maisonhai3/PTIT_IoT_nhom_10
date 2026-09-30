@@ -1,10 +1,14 @@
 openapi: 3.0.3
 info:
   title: Awning Controller API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Backend API cho hệ thống giàn phơi thông minh.
     Đây là **contract** giữa backend (Go) và front-end. Đổi contract => báo cả hai bên.
+
+    - Thời gian là chuỗi RFC 3339 (UTC). `ts` do **backend** gán khi nhận dữ liệu, ESP32 không có đồng hồ đáng tin cậy.
+    - Nếu backend đặt biến `API_TOKEN` thì `POST /api/command` cần header `Authorization: Bearer <token>`.
+      Các endpoint đọc (GET, WebSocket) luôn mở trong LAN.
 servers:
   - url: http://localhost:8080
 paths:
@@ -22,6 +26,9 @@ paths:
     post:
       summary: Gửi lệnh điều khiển xuống ESP32
       operationId: postCommand
+      security:
+        - {}
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -29,20 +36,33 @@ paths:
             schema: { $ref: "#/components/schemas/Command" }
       responses:
         "202":
-          description: Lệnh đã được gửi (chưa chắc thiết bị đã thực thi; theo dõi qua /api/state hoặc /ws)
+          description: Lệnh đã được gửi tới broker (chưa chắc thiết bị đã thực thi; theo dõi qua `/api/state` hoặc `/ws`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandResult" }
         "400":
           description: Lệnh không hợp lệ
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Thiếu hoặc sai token (chỉ khi backend bật `API_TOKEN`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "409":
-          description: Thiết bị đang offline
+          description: Thiết bị đang offline nên lệnh sẽ bị mất (lệnh không được giữ lại trên broker)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Backend mất kết nối tới MQTT broker
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
   /api/weather:
     get:
-      summary: Thời tiết hiện tại và dự báo ngắn hạn
+      summary: Thời tiết hiện tại và dự báo ngắn hạn (nguồn Open-Meteo)
       operationId: getWeather
       responses:
         "200":
@@ -51,13 +71,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Weather" }
         "503":
-          description: Chưa lấy được dữ liệu thời tiết
+          description: Chưa lấy được dữ liệu thời tiết lần nào
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
   /api/history:
     get:
-      summary: Lịch sử telemetry
+      summary: Lịch sử cảm biến, sắp xếp tăng dần theo thời gian
+      description: Tối đa 1000 điểm; nếu nhiều hơn, backend lấy mẫu đều.
       operationId: getHistory
       parameters:
         - name: hours
@@ -70,75 +91,182 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Telemetry" }
+                items: { $ref: "#/components/schemas/HistoryPoint" }
+  /api/events:
+    get:
+      summary: Nhật ký sự kiện gần đây, mới nhất trước
+      operationId: getEvents
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Event" }
+  /healthz:
+    get:
+      summary: Kiểm tra sống (dùng cho Docker/monitor)
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
   /ws:
     get:
       summary: WebSocket đẩy realtime
       description: |
-        Upgrade sang WebSocket. Server gửi các message dạng
-        `{"type":"state","data":<State>}` hoặc `{"type":"weather","data":<Weather>}`
-        mỗi khi dữ liệu thay đổi. Client không cần gửi gì.
+        Upgrade sang WebSocket. Khi vừa kết nối, server gửi ngay `state` hiện tại và `weather` (nếu đã có).
+        Sau đó server gửi message dạng `{"type": "...", "data": ...}` mỗi khi dữ liệu thay đổi
+        (xem schema `WsMessage`). Client không cần gửi gì. Server gửi ping định kỳ, client nên tự kết nối lại
+        khi bị ngắt và gọi lại `GET /api/state` để chắc chắn dữ liệu mới.
       responses:
         "101":
           description: Switching Protocols
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     AwningState:
       type: string
       enum: [OPEN, CLOSING, CLOSED, OPENING, ERROR]
     Mode:
       type: string
+      description: "AUTO: tự quyết theo mưa. MANUAL: đang theo lệnh tay, tự quay về AUTO sau một thời gian (`manual_left_s`)."
       enum: [AUTO, MANUAL]
     RainSource:
       type: string
-      description: "api = mưa theo Open-Meteo, sim = đang giả lập mưa, none = không mưa"
-      enum: [api, sim, none]
+      description: |
+        Nguồn khiến ESP32 coi là đang mưa:
+        `api` = Open-Meteo (đang mưa hoặc sắp mưa trong 15 phút),
+        `sim` = đang giả lập mưa,
+        `local` = fail-safe: dữ liệu thời tiết đã cũ nên dùng độ ẩm cao + trời tối,
+        `none` = không mưa.
+      enum: [none, api, sim, local]
     Telemetry:
       type: object
-      required: [ts, temp, humidity, light, state, mode]
+      required: [ts, temp, humidity, light, state, mode, rain, rain_source, weather_age_s, fail_safe, manual_left_s]
       properties:
         ts: { type: string, format: date-time }
-        temp: { type: number, description: "°C (DHT11)" }
-        humidity: { type: number, description: "% RH (DHT11)" }
-        light: { type: integer, minimum: 0, maximum: 4095, description: "ADC thô của LDR; cao = sáng" }
+        temp: { type: number, nullable: true, description: "°C (DHT11); null nếu đọc lỗi" }
+        humidity: { type: number, nullable: true, description: "% RH (DHT11); null nếu đọc lỗi" }
+        light: { type: integer, minimum: 0, maximum: 4095, description: "ADC 12-bit của quang trở đã chuẩn hoá: cao = sáng" }
         state: { $ref: "#/components/schemas/AwningState" }
         mode: { $ref: "#/components/schemas/Mode" }
+        rain: { type: boolean, description: "ESP32 đang coi là có mưa (trước khi qua bộ lọc thời gian)" }
         rain_source: { $ref: "#/components/schemas/RainSource" }
-        weather_age_s: { type: integer, description: "Tuổi bản tin thời tiết ESP32 đang dùng (giây)" }
+        weather_age_s: { type: integer, minimum: -1, description: "Tuổi bản tin thời tiết ESP32 đang dùng (giây); -1 nếu chưa nhận lần nào" }
+        fail_safe: { type: boolean, description: "true nếu dữ liệu thời tiết đã cũ (> 30 phút) và ESP32 chỉ dựa vào cảm biến tại chỗ" }
+        manual_left_s: { type: integer, minimum: 0, description: "Số giây còn lại trước khi MANUAL tự về AUTO; 0 khi đang AUTO" }
+        rssi: { type: integer, description: "Cường độ WiFi (dBm)" }
+        uptime_s: { type: integer, minimum: 0 }
+    HistoryPoint:
+      type: object
+      required: [ts, temp, humidity, light, state, mode, rain, rain_source]
+      properties:
+        ts: { type: string, format: date-time }
+        temp: { type: number, nullable: true }
+        humidity: { type: number, nullable: true }
+        light: { type: integer }
+        state: { $ref: "#/components/schemas/AwningState" }
+        mode: { $ref: "#/components/schemas/Mode" }
+        rain: { type: boolean }
+        rain_source: { $ref: "#/components/schemas/RainSource" }
     State:
       type: object
-      required: [online, telemetry]
+      required: [online, last_seen, telemetry]
       properties:
-        online: { type: boolean, description: "false nếu ESP32 mất kết nối (LWT)" }
-        last_seen: { type: string, format: date-time }
-        telemetry: { $ref: "#/components/schemas/Telemetry" }
+        online:
+          type: boolean
+          description: "true khi ESP32 đang kết nối broker VÀ telemetry mới nhất chưa quá 20 giây"
+        last_seen: { type: string, format: date-time, nullable: true }
+        telemetry:
+          allOf:
+            - $ref: "#/components/schemas/Telemetry"
+          nullable: true
+          description: "null nếu backend chưa nhận telemetry nào từ lúc khởi động"
     Command:
       type: object
       required: [action]
+      additionalProperties: false
       properties:
         action:
           type: string
+          description: |
+            `open`/`close`: chạy giàn và chuyển sang MANUAL.
+            `auto`: quay về tự động.
+            `simulate_rain`/`clear_rain`: bật/tắt giả lập mưa trên thiết bị (mất khi thiết bị khởi động lại).
           enum: [open, close, auto, simulate_rain, clear_rain]
+    CommandResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [sent] }
+    ForecastPoint:
+      type: object
+      required: [time, precipitation_probability, precipitation_mm]
+      properties:
+        time: { type: string, format: date-time }
+        precipitation_probability: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        precipitation_mm: { type: number }
     Weather:
       type: object
-      required: [fetched_at, temperature_c, precipitation_mm, is_raining, description]
+      required: [fetched_at, location, temperature_c, humidity, precipitation_mm, is_raining, weather_code, description, rain_expected_15m, forecast]
       properties:
         fetched_at: { type: string, format: date-time }
+        location: { type: string }
         temperature_c: { type: number }
-        humidity: { type: number }
+        humidity: { type: number, description: "% RH" }
         precipitation_mm: { type: number }
-        is_raining: { type: boolean }
-        weather_code: { type: integer, description: "WMO code từ Open-Meteo" }
-        description: { type: string }
+        is_raining: { type: boolean, description: "Đang có mưa theo Open-Meteo (lượng mưa > 0 hoặc mã thời tiết là mưa/tuyết/dông)" }
+        weather_code: { type: integer, description: "Mã WMO từ Open-Meteo" }
+        description: { type: string, description: "Mô tả tiếng Việt theo mã WMO" }
         rain_expected_15m: { type: boolean, description: "Dự báo có mưa trong 15 phút tới" }
         forecast:
           type: array
-          items:
-            type: object
-            properties:
-              time: { type: string, format: date-time }
-              precipitation_probability: { type: integer }
-              precipitation_mm: { type: number }
+          description: "Dự báo theo giờ, tối đa 3 mục kể từ giờ hiện tại"
+          items: { $ref: "#/components/schemas/ForecastPoint" }
+    Event:
+      type: object
+      required: [ts, kind, detail]
+      properties:
+        ts: { type: string, format: date-time }
+        kind:
+          type: string
+          description: |
+            `state`: trạng thái giàn đổi (detail = AwningState).
+            `mode`: chế độ đổi (detail = AUTO|MANUAL).
+            `online`: thiết bị online/offline (detail = true|false).
+            `command`: có lệnh gửi từ web (detail = action).
+            `rain`: nguồn mưa đổi (detail = RainSource).
+            `weather_error`: lấy thời tiết thất bại (detail = thông báo lỗi).
+          enum: [state, mode, online, command, rain, weather_error]
+        detail: { type: string }
+    Health:
+      type: object
+      required: [status, mqtt_connected, device_online]
+      properties:
+        status: { type: string, enum: [ok] }
+        mqtt_connected: { type: boolean }
+        device_online: { type: boolean }
+    WsMessage:
+      type: object
+      required: [type, data]
+      properties:
+        type: { type: string, enum: [state, weather, event] }
+        data:
+          oneOf:
+            - $ref: "#/components/schemas/State"
+            - $ref: "#/components/schemas/Weather"
+            - $ref: "#/components/schemas/Event"
     Error:
       type: object
       required: [error]
