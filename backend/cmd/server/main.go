@@ -19,6 +19,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" { // used by the Docker HEALTHCHECK
+		addr := os.Getenv("HTTP_ADDR")
+		if addr == "" {
+			addr = ":8080"
+		}
+		os.Exit(healthcheck(addr))
+	}
 	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
@@ -53,7 +60,7 @@ func run() error {
 	a := app.New(cfg, app.Deps{
 		MQTT: mq,
 		Weather: &weather.OpenMeteo{
-			Lat: cfg.WeatherLat, Lon: cfg.WeatherLon, Location: cfg.WeatherLocation,
+			BaseURL: cfg.WeatherBaseURL, Lat: cfg.WeatherLat, Lon: cfg.WeatherLon, Location: cfg.WeatherLocation,
 			HTTP: &http.Client{Timeout: 15 * time.Second},
 		},
 		Store: st,

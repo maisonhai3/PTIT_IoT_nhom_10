@@ -1,0 +1,9 @@
+.git
+**/node_modules
+firmware
+docs
+deploy
+**/*.db
+**/.env
+backend/bin
+frontend/e2e

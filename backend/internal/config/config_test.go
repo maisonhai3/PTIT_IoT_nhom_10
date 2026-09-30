@@ -62,6 +62,7 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		"wildcard prefix":   {"MQTT_TOPIC_PREFIX": "pkg/#"},
 		"mqtt url no proto": {"MQTT_URL": "localhost:1883"},
 		"bad log level":     {"LOG_LEVEL": "loud"},
+		"weather url":       {"WEATHER_BASE_URL": "localhost:9999"},
 	}
 	for name, vars := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -69,6 +70,19 @@ func TestLoadRejectsBadValues(t *testing.T) {
 				t.Fatalf("expected an error for %v", vars)
 			}
 		})
+	}
+}
+
+func TestLoadWeatherBaseURL(t *testing.T) {
+	c, err := Load(env(map[string]string{"WEATHER_BASE_URL": "http://127.0.0.1:9999/"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WeatherBaseURL != "http://127.0.0.1:9999" {
+		t.Errorf("trailing slash must be trimmed: %q", c.WeatherBaseURL)
+	}
+	if c, _ := Load(env(nil)); c.WeatherBaseURL != "" {
+		t.Errorf("default must be empty (real Open-Meteo), got %q", c.WeatherBaseURL)
 	}
 }
 

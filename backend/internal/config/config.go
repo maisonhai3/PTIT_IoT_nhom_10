@@ -34,6 +34,7 @@ type Config struct {
 	WeatherLat             float64
 	WeatherLon             float64
 	WeatherLocation        string
+	WeatherBaseURL         string // empty = https://api.open-meteo.com (set for a self-hosted instance or a test double)
 	WeatherPollInterval    time.Duration
 	WeatherPublishInterval time.Duration // heartbeat to the device
 
@@ -92,6 +93,7 @@ func Load(getenv func(string) string) (Config, error) {
 		WeatherLat:             float("WEATHER_LAT", 21.0285, -90, 90),
 		WeatherLon:             float("WEATHER_LON", 105.8542, -180, 180),
 		WeatherLocation:        get("WEATHER_LOCATION", "Hà Nội"),
+		WeatherBaseURL:         strings.TrimRight(get("WEATHER_BASE_URL", ""), "/"),
 		WeatherPollInterval:    dur("WEATHER_POLL_INTERVAL", 5*time.Minute, time.Minute),
 		WeatherPublishInterval: dur("WEATHER_PUBLISH_INTERVAL", time.Minute, time.Second),
 
@@ -107,6 +109,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if strings.ContainsAny(c.TopicPrefix, "#+") {
 		errs = append(errs, errors.New("MQTT_TOPIC_PREFIX must not contain wildcards (# or +)"))
+	}
+	if c.WeatherBaseURL != "" && !strings.HasPrefix(c.WeatherBaseURL, "http://") && !strings.HasPrefix(c.WeatherBaseURL, "https://") {
+		errs = append(errs, fmt.Errorf("WEATHER_BASE_URL=%q: need an http(s) URL", c.WeatherBaseURL))
 	}
 	if !strings.Contains(c.MQTTURL, "://") {
 		errs = append(errs, fmt.Errorf("MQTT_URL=%q: need a URL like tcp://host:1883", c.MQTTURL))
