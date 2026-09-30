@@ -1,0 +1,13 @@
+# ESP32: chỉ ghi telemetry/status, chỉ đọc cmd/weather
+user esp32-awning01
+topic write pkg/awning01/telemetry
+topic write pkg/awning01/status
+topic read pkg/awning01/cmd
+topic read pkg/awning01/weather
+
+# Backend: ngược lại
+user backend
+topic read pkg/awning01/telemetry
+topic read pkg/awning01/status
+topic write pkg/awning01/cmd
+topic write pkg/awning01/weather

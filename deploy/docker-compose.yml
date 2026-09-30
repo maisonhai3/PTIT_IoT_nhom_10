@@ -1,0 +1,40 @@
+# Chạy: cd deploy && ./mosquitto/gen-passwd.sh && cp ../backend/.env.example ../backend/.env && docker compose up -d --build
+# Mosquitto: broker MQTT trong LAN. backend: API + giao diện web (http://<IP máy>:8080).
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: awning-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      # Tạo bằng ./mosquitto/gen-passwd.sh (đã .gitignore)
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto-data:/mosquitto/data
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: awning-backend
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    # Bí mật và cấu hình (MQTT_USER, MQTT_PASSWORD khớp gen-passwd.sh, toạ độ, API_TOKEN...) nằm trong backend/.env
+    env_file:
+      - ../backend/.env
+    environment:
+      # Trong mạng của compose, broker có tên dịch vụ là "mosquitto" (ghi đè giá trị trong .env)
+      MQTT_URL: tcp://mosquitto:1883
+      DB_PATH: /data/awning.db
+      STATIC_DIR: /app/frontend
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-data:/data
+
+volumes:
+  mosquitto-data:
+  backend-data:

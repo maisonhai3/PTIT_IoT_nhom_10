@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Theo dõi thời tiết, xem trạng thái và điều khiển giàn phơi tự thu khi mưa.">
+  <title>Giàn phơi thông minh</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Bỏ qua tới nội dung chính</a>
+
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18l-1.5-5h-15zM5 9v11M19 9v11M8 13h8"/></svg>
+      <h1>Giàn phơi thông minh</h1>
+    </div>
+    <div class="top-status">
+      <span class="chip" id="pill-server" data-tone="muted">Máy chủ: đang kết nối…</span>
+      <span class="chip" id="pill-device" data-tone="muted">Thiết bị: chưa rõ</span>
+      <button class="btn btn-small" id="theme-toggle" type="button">Giao diện: Tự động</button>
+    </div>
+  </header>
+
+  <div id="banners" class="banners"></div>
+
+  <main id="main" class="grid">
+    <section class="card c-awning" id="awning" aria-labelledby="awning-h"></section>
+    <section class="card c-weather" id="weather" aria-labelledby="weather-h"></section>
+    <section class="card c-sensors" id="sensors" aria-labelledby="sensors-h"></section>
+    <section class="card c-history" id="history" aria-labelledby="history-h"></section>
+    <section class="card c-events" id="events" aria-labelledby="events-h"></section>
+  </main>
+
+  <footer class="foot">
+    Dữ liệu thời tiết: <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> · Điều khiển qua MQTT tới ESP32
+  </footer>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <dialog id="token-dialog" aria-labelledby="token-h">
+    <form method="dialog" id="token-form">
+      <h2 id="token-h">Nhập mã truy cập</h2>
+      <p>Máy chủ yêu cầu mã để điều khiển giàn. Mã được lưu trên trình duyệt này.</p>
+      <label for="token-input">Mã truy cập</label>
+      <input id="token-input" type="password" autocomplete="off" spellcheck="false" required>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" type="button" id="token-cancel">Hủy</button>
+        <button class="btn btn-primary" value="ok" type="submit">Lưu và gửi lại</button>
+      </div>
+    </form>
+  </dialog>
+
+  <noscript><p class="noscript">Trang này cần bật JavaScript để hiển thị trạng thái và điều khiển giàn.</p></noscript>
+</body>
+</html>
