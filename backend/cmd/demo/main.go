@@ -30,6 +30,8 @@ func main() {
 		rainCycle = flag.Duration("rain-cycle", 4*time.Minute, "period of the scripted weather (clear -> rain expected -> raining); 0 = always clear")
 		fast      = flag.Bool("fast", true, "short device timers (rain 3s, dry 20s) so the demo reacts quickly")
 		live      = flag.Bool("live-weather", false, "use the real Open-Meteo API instead of the scripted weather (needs Internet)")
+		noWeather = flag.Bool("no-weather", false, "the weather source always fails: see the UI without weather and the device's fail-safe")
+		withDev   = flag.Bool("device", true, "run the simulated ESP32; -device=false shows how the UI looks with the device offline")
 		token     = flag.String("token", "", "require this bearer token for POST /api/command")
 		debug     = flag.Bool("debug", false, "verbose logging")
 	)
@@ -65,8 +67,15 @@ func main() {
 	defer st.Close()
 
 	var wx weather.Client = &weather.Scripted{Location: "Demo (thời tiết giả lập)", Period: *rainCycle, Origin: time.Now()}
+	// The scripted phases are short (the "rain expected" phase lasts 30s by default), so poll it often. The config
+	// validation floor (1 minute) protects the real Open-Meteo API, which does not apply to a local fake.
+	cfg.WeatherPollInterval = 10 * time.Second
 	if *live {
+		cfg.WeatherPollInterval = 5 * time.Minute
 		wx = &weather.OpenMeteo{Lat: cfg.WeatherLat, Lon: cfg.WeatherLon, Location: cfg.WeatherLocation, HTTP: &http.Client{Timeout: 15 * time.Second}}
+	}
+	if *noWeather {
+		wx = weather.Failing{}
 	}
 
 	mq := mqttx.NewPaho(mqttx.Options{URL: broker.URL(), ClientID: "awning-backend", Log: log})
@@ -81,11 +90,13 @@ func main() {
 	if *fast {
 		simCfg = devicesim.FastConfig()
 	}
-	sim := devicesim.New(devicesim.Options{
-		BrokerURL: broker.URL(), Prefix: cfg.TopicPrefix, Brain: simCfg,
-		Every: time.Second, Seed: time.Now().UnixNano(), Log: log.With("who", "device-sim"),
-	})
-	go sim.Run(ctx)
+	if *withDev {
+		sim := devicesim.New(devicesim.Options{
+			BrokerURL: broker.URL(), Prefix: cfg.TopicPrefix, Brain: simCfg,
+			Every: time.Second, Seed: time.Now().UnixNano(), Log: log.With("who", "device-sim"),
+		})
+		go sim.Run(ctx)
+	}
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() {

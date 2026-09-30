@@ -32,6 +32,9 @@ func DefaultConfig() Config {
 func FastConfig() Config {
 	c := DefaultConfig()
 	c.RainConfirm, c.DryConfirm, c.ManualTimeout, c.Travel = 3*time.Second, 20*time.Second, 60*time.Second, 4*time.Second
+	// Without any weather message the device enters fail-safe after this long (the real one waits 2 minutes).
+	// WeatherStale stays at 30 minutes: it must exceed the 5-minute Open-Meteo polling interval.
+	c.FirstGrace = 15 * time.Second
 	return c
 }
 

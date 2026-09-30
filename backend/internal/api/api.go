@@ -270,6 +270,9 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" && !sameOrigin(r, origin) && s.corsAllowed(origin) {
 			h := w.Header()
+			// The front-end estimates the server's clock offset from the Date header; cross-origin pages
+			// can only read it when it is exposed.
+			h.Set("Access-Control-Expose-Headers", "Date")
 			if s.allowAnyOrigin() {
 				h.Set("Access-Control-Allow-Origin", "*")
 			} else {

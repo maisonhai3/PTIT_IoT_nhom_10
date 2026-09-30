@@ -1,0 +1,16 @@
+{
+  "name": "awning-frontend",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Giao diện web cho giàn phơi thông minh (không cần build, không phụ thuộc thư viện khi chạy).",
+  "scripts": {
+    "test": "node --test",
+    "e2e": "node e2e/smoke.mjs",
+    "e2e:axe": "AXE=1 node e2e/smoke.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.10.0",
+    "playwright": "^1.56.0"
+  }
+}

@@ -335,6 +335,9 @@ func TestCORS(t *testing.T) {
 	if resp.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || resp.Header.Get("Vary") != "Origin" {
 		t.Errorf("allowed origin headers: %v", resp.Header)
 	}
+	if resp.Header.Get("Access-Control-Expose-Headers") != "Date" {
+		t.Errorf("Date header must be exposed to cross-origin pages: %v", resp.Header)
+	}
 	resp, _ = do(t, "GET", srv.URL+"/api/state", "", map[string]string{"Origin": "http://evil.example"})
 	if resp.Header.Get("Access-Control-Allow-Origin") != "" {
 		t.Error("foreign origin got CORS headers")

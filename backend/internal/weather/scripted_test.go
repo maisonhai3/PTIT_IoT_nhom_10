@@ -2,6 +2,7 @@ package weather
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -52,4 +53,31 @@ func TestScriptedFetchMatchesPhase(t *testing.T) {
 	check("expected", false, true, 3)
 	at = origin.Add(200 * time.Second)
 	check("raining", true, false, 63)
+}
+
+// Regression: the first fetch right after start must be clear. Truncating "now" to whole seconds used to put it
+// before Origin, which wrapped to the raining phase at the end of the cycle.
+func TestScriptedFirstFetchAfterStartIsClear(t *testing.T) {
+	origin := time.Date(2026, 9, 30, 12, 0, 0, 700_000_000, time.UTC) // 700ms into the second
+	for _, d := range []time.Duration{0, 10 * time.Millisecond, 250 * time.Millisecond, 300 * time.Millisecond} {
+		at := origin.Add(d)
+		s := &Scripted{Period: 4 * time.Minute, Origin: origin, Now: func() time.Time { return at }}
+		w, err := s.Fetch(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w.IsRaining || w.RainExpected15m {
+			t.Errorf("%v after start: %+v, want clear", d, w)
+		}
+	}
+}
+
+func TestFailingAlwaysErrors(t *testing.T) {
+	if _, err := (Failing{}).Fetch(context.Background()); err == nil {
+		t.Fatal("Failing returned no error")
+	}
+	want := errors.New("boom")
+	if _, err := (Failing{Err: want}).Fetch(context.Background()); !errors.Is(err, want) {
+		t.Fatalf("got %v", err)
+	}
 }
