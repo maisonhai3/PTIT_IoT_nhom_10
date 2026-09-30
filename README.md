@@ -91,6 +91,8 @@ make test-backend     # gofmt, vet, go test -race (gồm end-to-end qua broker M
 make test-frontend    # node --test
 make test-firmware    # pio test -e native (cần: pip install platformio)
 make e2e              # trình duyệt thật + demo (cần: cd frontend && npm i && npx playwright install chromium)
+make hostsim          # firmware thật build cho Linux + Mosquitto thật, 11 kịch bản (~7 phút, cần g++, mosquitto, paho-mqtt)
+make hostsim-backend  # firmware thật + backend Go thật + Mosquitto thật (~4 phút)
 ```
 CI (`.github/workflows/ci.yml`) chạy các bước trên cùng kiểm tra trợ năng (axe-core) và build Docker image.
 
@@ -114,13 +116,15 @@ Trong môi trường phát triển của dự án (Linux, không có phần cứ
 |---|---|
 | Backend | Toàn bộ test có `-race` (trên cả Go 1.22 và 1.24), gồm end-to-end qua broker MQTT nhúng; mọi response được đối chiếu với `docs/openapi.yaml` |
 | Mosquitto | Cấu hình `deploy/` trên **Mosquitto 2.0.18 thật**: từ chối ẩn danh và sai mật khẩu, ACL từng topic, Last Will, retained. Backend và thiết bị giả chạy qua nó: thử lại khi nguồn thời tiết lỗi, lệnh, mưa làm giàn tự thu, giết thiết bị đột ngột |
-| Firmware (logic) | `pio test -e native`: 73 test (state machine, thời tiết cũ, tràn `millis()`, interlock relay bằng fuzz, JSON đúng bộ key) |
-| Firmware (biên dịch) | `pio run -e esp32dev` cross-compile thành công cho ESP32 (RAM 14%, flash 61%, không cảnh báo) |
-| Firmware thật trong vòng lặp | Mã nguồn firmware thật (glue mạng, task, phần cứng giả) build cho Linux, nối Mosquitto thật + **backend Go thật** + Open-Meteo giả: 24 kiểm tra đạt (lệnh web, công tắc hành trình dừng sớm, nút tay ngắn và dài, mưa giả lập, DHT lỗi thành `null`, mưa từ Open-Meteo làm giàn tự thu rồi tự mở, rớt WiFi rồi hồi phục) |
+| Firmware (logic) | `pio test -e native`: 76 test (state machine, thời tiết cũ, tràn `millis()`, interlock relay bằng fuzz, JSON đúng bộ key). Kiểm thử đột biến: cài cố ý 46 lỗi vào lõi điều khiển, 45 lỗi bị test bắt; lỗi còn lại tương đương về hành vi (một điều kiện thừa) |
+| Firmware (biên dịch) | `pio run -e esp32dev` và `-e esp32dev-demo` cross-compile thành công cho ESP32 (RAM 14%, flash 61%, không cảnh báo trong `src/`) |
+| Firmware thật + Mosquitto thật | `firmware/hostsim`: chính mã nguồn firmware (glue mạng, task, PubSubClient, ArduinoJson) build cho Linux với Arduino/WiFi/phần cứng giả, nối Mosquitto 2.0.18 với ACL của repo: 70 kiểm tra / 11 kịch bản (LWT khi bị kill, chu kỳ telemetry, độ trễ công tắc hành trình < 150 ms, thời tiết cũ và fail-safe, rớt WiFi, broker chết mà vòng điều khiển không khựng, watchdog, `millis()` tràn số) |
+| Firmware thật + backend Go thật | Cùng firmware đó nối với **backend Go thật** qua Mosquitto thật và Open-Meteo giả: 22 kiểm tra đạt (lệnh web, công tắc hành trình dừng sớm, nút tay ngắn và dài, mưa giả lập, DHT lỗi thành `null`, mưa từ Open-Meteo làm giàn tự thu rồi tự mở, rớt WiFi rồi hồi phục). Chạy lại bằng `make hostsim` và `make hostsim-backend` (không nằm trong CI vì mất khoảng 11 phút và cần Mosquitto) |
 | Front-end | 36 test logic; kiểm thử Chromium thật: điều khiển, mưa giả lập, biểu đồ, mất máy chủ rồi tự hồi phục, thiết bị offline, mất thời tiết, nhập token, di động; axe-core không có vi phạm ở chế độ sáng và tối |
 
 **Chưa kiểm chứng** (cần bạn thử, xem [`docs/bringup.md`](docs/bringup.md)):
-- **Chạy trên ESP32 thật**: cực tính quang trở, mức kích relay, độ ổn định WiFi/MQTT, timing thật của DHT11 và OLED. Phần đã chạy ở trên dùng phần cứng giả.
+- **Chạy trên ESP32 thật**: cực tính quang trở, mức kích relay (một số module 5 V kích mức thấp không nhả hẳn khi chân ra 3,3 V), độ ổn định WiFi/MQTT của `WiFiClient` thật, timing thật của DHT11 và OLED,
+  watchdog reset thật, và dung lượng stack của các task (net 10 KB, loop 8 KB chưa đo `high-water mark`). Phần đã chạy ở trên dùng phần cứng giả. Chưa thử Arduino core 3.x (platform được ghim ở `espressif32@6.9.0`).
 - Build Docker image và `docker compose` (môi trường phát triển không có Docker daemon; Dockerfile và compose mới chỉ được đọc lại và kiểm tra cú pháp).
 - Gọi **Open-Meteo thật** (môi trường phát triển không ra được Internet ngoài danh sách cho phép; phần phân tích dùng dữ liệu theo đúng tài liệu API và một máy chủ giả).
 - Chạy trên GitHub Actions (các lệnh trong workflow đã chạy được từng cái ở đây, nhưng workflow chưa chạy trên GitHub).

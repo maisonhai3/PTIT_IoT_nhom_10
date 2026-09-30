@@ -6,7 +6,7 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
 | Topic | Chiều | QoS | Retained | Payload |
 |---|---|---|---|---|
 | `telemetry` | ESP32 → backend | 0 | không | JSON, mỗi 5 giây và ngay khi trạng thái đổi |
-| `status` | ESP32 → backend | 1 | có | `online` / `offline`. `offline` là **LWT**: broker tự publish khi ESP32 mất kết nối |
+| `status` | ESP32 → backend | 1 (LWT) / 0 (`online`) | có | `online` / `offline`. `offline` là **LWT**: broker tự publish khi ESP32 mất kết nối. Thư viện PubSubClient không publish được QoS 1 nên `online` đi bằng QoS 0; không sao vì telemetry 5 giây/lần mới là bằng chứng "còn sống", `status` chỉ giúp backend khởi động sau vẫn biết ngay |
 | `cmd` | backend → ESP32 | 1 | không | `{"action":"open"}` |
 | `weather` | backend → ESP32 | 1 | không | JSON, mỗi 60 giây (heartbeat) và ngay khi thiết bị vừa `online` |
 
@@ -41,7 +41,8 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
 ```json
 { "age_s": 42, "is_raining": false, "rain_expected_15m": true }
 ```
-`age_s` là tuổi của dữ liệu Open-Meteo tại thời điểm backend publish (giây).
+`age_s` là tuổi của dữ liệu Open-Meteo tại thời điểm backend publish (giây), **số nguyên không âm**. Firmware chấp nhận cả số thực (cắt phần lẻ)
+nhưng bỏ qua bản tin nếu `age_s` âm, thiếu, không phải số, hoặc `is_raining`/`rain_expected_15m` không phải boolean.
 
 ## Vì sao thiết kế như vậy
 - **`weather` không retained + có `age_s`.** Nếu retained, khi ESP32 khởi động lại nó sẽ nhận ngay một bản tin *cũ* mà không biết cũ bao lâu,
@@ -65,3 +66,9 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
 
 Mưa = `weather.is_raining` **hoặc** `weather.rain_expected_15m` **hoặc** đang giả lập mưa.
 Ở trạng thái "không biết" (thời tiết cũ nhưng chưa đủ điều kiện fail-safe) cả hai bộ đếm thời gian được reset, giàn giữ nguyên.
+
+### Thoát khỏi `ERROR`
+- `open` / `close` từ web: chạy lại hành trình theo hướng được chọn. Nút tay: từ `ERROR` luôn thử **thu** giàn (an toàn hơn khi không biết giàn đang ở đâu).
+- Công tắc hành trình: phải có **một lần nhấn mới** (từ nhả sang nhấn) thì `ERROR` mới thành `CLOSED`/`OPEN`. Công tắc kẹt ở mức "đang nhấn" thì không tự thoát,
+  để giàn không lặp `ERROR → chạy → ERROR`.
+- `auto` chỉ đổi chế độ, **không** xoá `ERROR`; luật tự động **không bao giờ** tự thử lại một hành trình đã lỗi (cần người quyết định).
