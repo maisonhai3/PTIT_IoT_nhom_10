@@ -14,6 +14,7 @@ lib/awning_core/      máy trạng thái + nút bấm (C++11 thuần, test trên
 lib/awning_msg/       JSON: lệnh, thời tiết, telemetry (ArduinoJson v7)
 src/                  main.cpp (điều khiển), net.cpp (WiFi/MQTT), hardware.cpp, shared.cpp
 test/                 test Unity chạy bằng `pio test -e native`
+hostsim/              chạy chính firmware này trên máy tính với Mosquitto thật (xem hostsim/README.md)
 ```
 
 ## Build, nạp, theo dõi

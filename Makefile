@@ -1,6 +1,6 @@
 # Lệnh tắt cho các việc hay làm. `make help` để xem danh sách.
 .DEFAULT_GOAL := help
-.PHONY: help demo test test-backend test-frontend test-firmware e2e build up down
+.PHONY: help demo test test-backend test-frontend test-firmware hostsim hostsim-backend e2e build up down
 
 help: ## Liệt kê các lệnh
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -19,6 +19,12 @@ test-frontend: ## Front-end: test logic thuần bằng node --test
 
 test-firmware: ## Firmware: test lõi C++ trên máy tính (cần PlatformIO: pip install platformio)
 	cd firmware && pio test -e native
+
+hostsim: ## Firmware thật build cho Linux + Mosquitto thật, 11 kịch bản (~7 phút; xem firmware/hostsim/README.md)
+	cd firmware/hostsim && ./build.sh && python3 e2e.py
+
+hostsim-backend: ## Firmware thật + backend Go thật + Mosquitto thật + Open-Meteo giả (~4 phút)
+	cd firmware/hostsim && ./build.sh && python3 with_backend.py
 
 e2e: ## Kiểm thử trình duyệt thật (cần: cd frontend && npm i && npx playwright install chromium)
 	cd frontend && node e2e/smoke.mjs
