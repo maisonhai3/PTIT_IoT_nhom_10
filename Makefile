@@ -3,7 +3,7 @@
 .PHONY: help demo test test-backend test-frontend test-firmware e2e build up down
 
 help: ## Liệt kê các lệnh
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
 
 demo: ## Chạy cả hệ thống không cần phần cứng: mở http://127.0.0.1:8080
 	cd backend && go run ./cmd/demo

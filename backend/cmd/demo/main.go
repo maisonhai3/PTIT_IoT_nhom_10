@@ -31,6 +31,7 @@ func main() {
 		fast      = flag.Bool("fast", true, "short device timers (rain 3s, dry 20s) so the demo reacts quickly")
 		live      = flag.Bool("live-weather", false, "use the real Open-Meteo API instead of the scripted weather (needs Internet)")
 		noWeather = flag.Bool("no-weather", false, "the weather source always fails: see the UI without weather and the device's fail-safe")
+		seed      = flag.Bool("seed-history", true, "pre-fill 24 hours of plausible history (with three rain episodes) so the chart is not empty")
 		withDev   = flag.Bool("device", true, "run the simulated ESP32; -device=false shows how the UI looks with the device offline")
 		token     = flag.String("token", "", "require this bearer token for POST /api/command")
 		debug     = flag.Bool("debug", false, "verbose logging")
@@ -65,6 +66,14 @@ func main() {
 		fatal(log, err)
 	}
 	defer st.Close()
+
+	if *seed {
+		n, err := devicesim.SeedHistory(ctx, st, time.Now(), 24, 2*time.Minute, 42)
+		if err != nil {
+			fatal(log, err)
+		}
+		log.Info("seeded demo history", "rows", n)
+	}
 
 	var wx weather.Client = &weather.Scripted{Location: "Demo (thời tiết giả lập)", Period: *rainCycle, Origin: time.Now()}
 	// The scripted phases are short (the "rain expected" phase lasts 30s by default), so poll it often. The config
