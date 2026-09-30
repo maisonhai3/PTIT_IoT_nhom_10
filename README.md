@@ -108,10 +108,19 @@ CI (`.github/workflows/ci.yml`) chạy các bước trên cùng kiểm tra trợ
 
 ## Những điều đã kiểm chứng và chưa kiểm chứng
 
-Trong môi trường phát triển của dự án (Linux, không có phần cứng):
+Trong môi trường phát triển của dự án (Linux, không có phần cứng thật):
 
-- **Đã chạy và đạt**: toàn bộ test backend (có `-race`, cả trên Go 1.22 và 1.24); end-to-end qua broker MQTT nhúng; cấu hình Mosquitto (đăng nhập, ACL từng topic, Last Will) trên **Mosquitto 2.0.18 thật**
-  cùng backend và thiết bị giả (thử lại khi mất nguồn thời tiết, lệnh, mưa làm giàn tự thu, giết thiết bị đột ngột); test logic front-end; kiểm thử trình duyệt thật (Chromium): điều khiển, mưa giả lập,
-  biểu đồ, mất máy chủ rồi tự hồi phục, thiết bị offline, mất thời tiết, nhập token, di động, axe-core không có vi phạm ở chế độ sáng và tối.
-- **Chưa kiểm chứng**: chạy trên ESP32 thật (cần bạn thử, đặc biệt: cực tính quang trở, mức kích relay, độ ổn định WiFi/MQTT); build Docker image và `docker compose` (môi trường phát triển không có Docker daemon);
-  gọi Open-Meteo thật (môi trường phát triển không ra được Internet ngoài danh sách cho phép; phần phân tích dùng dữ liệu theo đúng tài liệu API và một máy chủ giả); chạy trên GitHub Actions.
+| Phần | Đã chạy và đạt |
+|---|---|
+| Backend | Toàn bộ test có `-race` (trên cả Go 1.22 và 1.24), gồm end-to-end qua broker MQTT nhúng; mọi response được đối chiếu với `docs/openapi.yaml` |
+| Mosquitto | Cấu hình `deploy/` trên **Mosquitto 2.0.18 thật**: từ chối ẩn danh và sai mật khẩu, ACL từng topic, Last Will, retained. Backend và thiết bị giả chạy qua nó: thử lại khi nguồn thời tiết lỗi, lệnh, mưa làm giàn tự thu, giết thiết bị đột ngột |
+| Firmware (logic) | `pio test -e native`: 73 test (state machine, thời tiết cũ, tràn `millis()`, interlock relay bằng fuzz, JSON đúng bộ key) |
+| Firmware (biên dịch) | `pio run -e esp32dev` cross-compile thành công cho ESP32 (RAM 14%, flash 61%, không cảnh báo) |
+| Firmware thật trong vòng lặp | Mã nguồn firmware thật (glue mạng, task, phần cứng giả) build cho Linux, nối Mosquitto thật + **backend Go thật** + Open-Meteo giả: 24 kiểm tra đạt (lệnh web, công tắc hành trình dừng sớm, nút tay ngắn và dài, mưa giả lập, DHT lỗi thành `null`, mưa từ Open-Meteo làm giàn tự thu rồi tự mở, rớt WiFi rồi hồi phục) |
+| Front-end | 36 test logic; kiểm thử Chromium thật: điều khiển, mưa giả lập, biểu đồ, mất máy chủ rồi tự hồi phục, thiết bị offline, mất thời tiết, nhập token, di động; axe-core không có vi phạm ở chế độ sáng và tối |
+
+**Chưa kiểm chứng** (cần bạn thử, xem [`docs/bringup.md`](docs/bringup.md)):
+- **Chạy trên ESP32 thật**: cực tính quang trở, mức kích relay, độ ổn định WiFi/MQTT, timing thật của DHT11 và OLED. Phần đã chạy ở trên dùng phần cứng giả.
+- Build Docker image và `docker compose` (môi trường phát triển không có Docker daemon; Dockerfile và compose mới chỉ được đọc lại và kiểm tra cú pháp).
+- Gọi **Open-Meteo thật** (môi trường phát triển không ra được Internet ngoài danh sách cho phép; phần phân tích dùng dữ liệu theo đúng tài liệu API và một máy chủ giả).
+- Chạy trên GitHub Actions (các lệnh trong workflow đã chạy được từng cái ở đây, nhưng workflow chưa chạy trên GitHub).
