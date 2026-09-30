@@ -5,8 +5,8 @@
 #include <DHT.h>
 #include <Wire.h>
 
+#include "awning_core.h"
 #include "config.h"
-#include "timing.h"
 
 namespace hw {
 
@@ -24,8 +24,8 @@ void relayWrite(uint8_t pin, bool on) {
 DHT g_dht(PIN_DHT, DHT11);
 SensorData g_sensors;
 uint8_t g_dhtFailures = 0;
-uint32_t g_nextDhtMs = 0;
-uint32_t g_nextLdrMs = 0;
+awning::Every g_dhtTimer(DHT_PERIOD_MS);
+awning::Every g_ldrTimer(LDR_PERIOD_MS);
 bool g_lightInit = false;
 int g_lightAcc = 0;  // smoothed light * 16: the extra bits let the filter converge exactly
 
@@ -109,8 +109,7 @@ void begin() {
   analogSetPinAttenuation(PIN_LDR, ADC_11db);  // ~0..3.1 V: covers a 3.3 V divider
 
   g_dht.begin();
-  g_nextDhtMs = millis() + 1500;  // DHT11 needs ~1 s after power-up
-  g_nextLdrMs = millis();
+  g_dhtTimer.startIn(millis(), 1500);  // DHT11 needs ~1 s after power-up
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.beginTransmission(OLED_I2C_ADDR);
@@ -138,8 +137,8 @@ bool rawLimitOpen() { return digitalRead(PIN_LIMIT_OPEN) == LOW; }
 bool rawManualButton() { return digitalRead(PIN_BTN_MANUAL) == LOW; }
 
 void sensorsUpdate(uint32_t nowMs) {
-  if (due(nowMs, g_nextLdrMs, LDR_PERIOD_MS)) readLdr();
-  if (due(nowMs, g_nextDhtMs, DHT_PERIOD_MS)) readDht();
+  if (g_ldrTimer.due(nowMs)) readLdr();
+  if (g_dhtTimer.due(nowMs)) readDht();
 }
 
 SensorData sensors() { return g_sensors; }

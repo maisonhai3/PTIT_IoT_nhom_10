@@ -16,7 +16,6 @@
 #include "hardware.h"
 #include "net.h"
 #include "shared.h"
-#include "timing.h"
 
 using awning::Action;
 using awning::Snapshot;
@@ -29,8 +28,8 @@ awning::Button g_btnManual(BUTTON_DEBOUNCE_MS, BUTTON_LONG_PRESS_MS);
 awning::Button g_btnClosed(BUTTON_DEBOUNCE_MS, BUTTON_LONG_PRESS_MS);  // limit switches: debounced level only
 awning::Button g_btnOpen(BUTTON_DEBOUNCE_MS, BUTTON_LONG_PRESS_MS);
 
-uint32_t g_nextOledMs = 0;
-uint32_t g_nextLogMs = 0;
+awning::Every g_oledTimer(OLED_PERIOD_MS);
+awning::Every g_logTimer(SERIAL_LOG_PERIOD_MS);
 TickType_t g_lastWake = 0;
 
 const char* resetReasonName() {
@@ -127,8 +126,8 @@ void controlTick(uint32_t now) {
   }
 
   // 4. Slow stuff.
-  if (due(now, g_nextOledMs, OLED_PERIOD_MS)) hw::oledDraw(snap, sensors, shared::netStatus());
-  if (due(now, g_nextLogMs, SERIAL_LOG_PERIOD_MS)) logStatus(snap, sensors, shared::netStatus());
+  if (g_oledTimer.due(now)) hw::oledDraw(snap, sensors, shared::netStatus());
+  if (g_logTimer.due(now)) logStatus(snap, sensors, shared::netStatus());
 }
 
 }  // namespace

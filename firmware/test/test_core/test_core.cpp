@@ -1341,6 +1341,46 @@ void test_fuzz_interlock_and_invariants() {
 }
 
 // ---------------------------------------------------------------------------------
+// Every (periodic timer used by the control loop)
+// ---------------------------------------------------------------------------------
+
+void test_every_fires_on_first_call_then_once_per_period() {
+  Every e(1000);
+  TEST_ASSERT_TRUE(e.due(5000));
+  TEST_ASSERT_FALSE(e.due(5999));
+  TEST_ASSERT_TRUE(e.due(6000));
+  TEST_ASSERT_FALSE(e.due(6001));
+  TEST_ASSERT_TRUE(e.due(20000));   // a stalled caller fires once, not once per missed period
+  TEST_ASSERT_FALSE(e.due(20500));
+  TEST_ASSERT_TRUE(e.due(21000));
+}
+
+void test_every_start_in_postpones_the_first_fire() {
+  Every e(2500);
+  e.startIn(100, 1500);
+  TEST_ASSERT_FALSE(e.due(100));
+  TEST_ASSERT_FALSE(e.due(1599));
+  TEST_ASSERT_TRUE(e.due(1600));
+  TEST_ASSERT_FALSE(e.due(4099));
+  TEST_ASSERT_TRUE(e.due(4100));
+}
+
+void test_every_is_exact_whatever_the_clock_value_including_rollover() {
+  // Regression: an "armed at 0" implementation never fires while millis() >= 2^31.
+  const uint32_t starts[] = {0u, 1000u, 0x7FFFFFF0u, 0x80000000u, 0x80000010u, 0xC0000000u, 0xFFFFF000u, 0xFFFFFFFFu};
+  for (size_t i = 0; i < sizeof(starts) / sizeof(starts[0]); ++i) {
+    Every e(1000);
+    int fires = 0;
+    uint32_t now = starts[i];
+    for (uint32_t t = 0; t <= 10000; t += 20) {
+      if (e.due(now)) ++fires;
+      now += 20;
+    }
+    TEST_ASSERT_EQUAL_INT(11, fires);  // t = 0, 1000, ..., 10000
+  }
+}
+
+// ---------------------------------------------------------------------------------
 // Button
 // ---------------------------------------------------------------------------------
 
@@ -1514,6 +1554,9 @@ int main(int, char**) {
   RUN_TEST(test_rollover_gives_identical_behaviour_at_any_start_time);
   RUN_TEST(test_rollover_specific_timers_across_the_wrap);
   RUN_TEST(test_fuzz_interlock_and_invariants);
+  RUN_TEST(test_every_fires_on_first_call_then_once_per_period);
+  RUN_TEST(test_every_start_in_postpones_the_first_fire);
+  RUN_TEST(test_every_is_exact_whatever_the_clock_value_including_rollover);
   RUN_TEST(test_button_ignores_glitches_shorter_than_debounce);
   RUN_TEST(test_button_bounce_on_press_and_release_is_one_short_press);
   RUN_TEST(test_button_short_press_fires_on_release);

@@ -12,6 +12,28 @@ inline uint32_t elapsedMs(uint32_t now, uint32_t since) {
   return d > 0x7FFFFFFFu ? 0u : d;
 }
 
+// Fires once per period, rollover-safe (signed difference). The first call fires at once,
+// unless startIn() postponed it.
+class Every {
+ public:
+  explicit Every(uint32_t periodMs) : periodMs_(periodMs) {}
+  void startIn(uint32_t nowMs, uint32_t delayMs) {
+    nextMs_ = nowMs + delayMs;
+    armed_ = true;
+  }
+  bool due(uint32_t nowMs) {
+    if (armed_ && static_cast<int32_t>(nowMs - nextMs_) < 0) return false;
+    armed_ = true;
+    nextMs_ = nowMs + periodMs_;
+    return true;
+  }
+
+ private:
+  uint32_t periodMs_;
+  uint32_t nextMs_ = 0;
+  bool armed_ = false;
+};
+
 enum class State : uint8_t { Open, Closing, Closed, Opening, Error };
 enum class Mode : uint8_t { Auto, Manual };
 enum class RainSource : uint8_t { None, Api, Sim, Local };
