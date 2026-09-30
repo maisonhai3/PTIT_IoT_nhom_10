@@ -34,6 +34,29 @@ jobs:
           node-version: 22
       - run: node --test
 
+  firmware:
+    # Test lõi C++ trên máy tính và biên dịch thật cho ESP32 (không nạp được board trong CI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio
+      - name: test lõi C++ (Unity, chạy trên máy tính)
+        run: pio test -e native
+      - name: biên dịch cho ESP32 (secrets.h chỉ là bản mẫu, không chứa bí mật)
+        run: |
+          cp include/secrets.h.example include/secrets.h
+          pio run -e esp32dev
+
   e2e:
     # Trình duyệt thật + backend demo + kiểm tra trợ năng (axe-core)
     runs-on: ubuntu-latest
