@@ -110,7 +110,7 @@ CI (`.github/workflows/ci.yml`) chạy các bước trên cùng kiểm tra trợ
 
 ## Những điều đã kiểm chứng và chưa kiểm chứng
 
-Trong môi trường phát triển của dự án (Linux, không có phần cứng thật):
+Trong môi trường phát triển của dự án (Linux, không có phần cứng thật) và trên GitHub Actions:
 
 | Phần | Đã chạy và đạt |
 |---|---|
@@ -121,10 +121,10 @@ Trong môi trường phát triển của dự án (Linux, không có phần cứ
 | Firmware thật + Mosquitto thật | `firmware/hostsim`: chính mã nguồn firmware (glue mạng, task, PubSubClient, ArduinoJson) build cho Linux với Arduino/WiFi/phần cứng giả, nối Mosquitto 2.0.18 với ACL của repo: 70 kiểm tra / 11 kịch bản (LWT khi bị kill, chu kỳ telemetry, độ trễ công tắc hành trình < 150 ms, thời tiết cũ và fail-safe, rớt WiFi, broker chết mà vòng điều khiển không khựng, watchdog, `millis()` tràn số) |
 | Firmware thật + backend Go thật | Cùng firmware đó nối với **backend Go thật** qua Mosquitto thật và Open-Meteo giả: 22 kiểm tra đạt (lệnh web, công tắc hành trình dừng sớm, nút tay ngắn và dài, mưa giả lập, DHT lỗi thành `null`, mưa từ Open-Meteo làm giàn tự thu rồi tự mở, rớt WiFi rồi hồi phục). Chạy lại bằng `make hostsim` và `make hostsim-backend` (không nằm trong CI vì mất khoảng 11 phút và cần Mosquitto) |
 | Front-end | 36 test logic; kiểm thử Chromium thật: điều khiển, mưa giả lập, biểu đồ, mất máy chủ rồi tự hồi phục, thiết bị offline, mất thời tiết, nhập token, di động; axe-core không có vi phạm ở chế độ sáng và tối |
+| CI trên GitHub Actions | Cả 5 job đạt trên các lần push gần nhất: backend (gofmt, vet, `-race`), front-end, firmware (test native và cross-compile ESP32), trình duyệt thật + axe-core, và `docker build` image backend |
 
 **Chưa kiểm chứng** (cần bạn thử, xem [`docs/bringup.md`](docs/bringup.md)):
 - **Chạy trên ESP32 thật**: cực tính quang trở, mức kích relay (một số module 5 V kích mức thấp không nhả hẳn khi chân ra 3,3 V), độ ổn định WiFi/MQTT của `WiFiClient` thật, timing thật của DHT11 và OLED,
   watchdog reset thật, và dung lượng stack của các task (net 10 KB, loop 8 KB chưa đo `high-water mark`). Phần đã chạy ở trên dùng phần cứng giả. Chưa thử Arduino core 3.x (platform được ghim ở `espressif32@6.9.0`).
-- Build Docker image và `docker compose` (môi trường phát triển không có Docker daemon; Dockerfile và compose mới chỉ được đọc lại và kiểm tra cú pháp).
+- **`docker compose up`** (Mosquitto và backend chạy trong container, kể cả nhánh dùng Docker của `gen-passwd.sh`): môi trường phát triển không có Docker daemon nên compose mới chỉ được đọc lại và kiểm tra cú pháp. Riêng `docker build` image backend đã đạt trong CI.
 - Gọi **Open-Meteo thật** (môi trường phát triển không ra được Internet ngoài danh sách cho phép; phần phân tích dùng dữ liệu theo đúng tài liệu API và một máy chủ giả).
-- Chạy trên GitHub Actions (các lệnh trong workflow đã chạy được từng cái ở đây, nhưng workflow chưa chạy trên GitHub).
