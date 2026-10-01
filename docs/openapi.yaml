@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Awning Controller API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Backend API cho hệ thống giàn phơi thông minh.
     Đây là **contract** giữa backend (Go) và front-end. Đổi contract => báo cả hai bên.
@@ -148,17 +148,21 @@ components:
         Nguồn khiến ESP32 coi là đang mưa:
         `api` = Open-Meteo (đang mưa hoặc sắp mưa trong 15 phút),
         `sim` = đang giả lập mưa,
+        `sensor` = cảm biến mưa tại chỗ báo tấm đang ướt,
         `local` = fail-safe: dữ liệu thời tiết đã cũ nên dùng độ ẩm cao + trời tối,
         `none` = không mưa.
-      enum: [none, api, sim, local]
+        Khi nhiều nguồn cùng báo mưa, ghi theo thứ tự ưu tiên `sim` > `sensor` > `api` > `local`.
+      enum: [none, api, sim, sensor, local]
     Telemetry:
       type: object
-      required: [ts, temp, humidity, light, state, mode, rain, rain_source, weather_age_s, fail_safe, manual_left_s]
+      required: [ts, temp, humidity, light, rain_level, rain_wet, state, mode, rain, rain_source, weather_age_s, fail_safe, manual_left_s]
       properties:
         ts: { type: string, format: date-time }
         temp: { type: number, nullable: true, description: "°C (DHT11); null nếu đọc lỗi" }
         humidity: { type: number, nullable: true, description: "% RH (DHT11); null nếu đọc lỗi" }
         light: { type: integer, minimum: 0, maximum: 4095, description: "ADC 12-bit của quang trở đã chuẩn hoá: cao = sáng. Module quang trở của kit chỉ có ngõ số nên giá trị chỉ gần 0 hoặc gần 4095" }
+        rain_level: { type: integer, nullable: true, minimum: 0, maximum: 4095, description: "Cảm biến mưa YL-83 (ADC 12-bit đã chuẩn hoá): cao = ướt, gần 0 khi tấm khô. null nếu thiết bị không có cảm biến mưa (hoặc firmware cũ chưa gửi trường này)" }
+        rain_wet: { type: boolean, nullable: true, description: "Kết luận ướt/khô của cảm biến mưa sau hai ngưỡng có độ trễ. null nếu không có cảm biến" }
         state: { $ref: "#/components/schemas/AwningState" }
         mode: { $ref: "#/components/schemas/Mode" }
         rain: { type: boolean, description: "ESP32 đang coi là có mưa (trước khi qua bộ lọc thời gian)" }

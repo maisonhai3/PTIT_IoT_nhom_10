@@ -39,6 +39,9 @@ func TestMQTTDocExamplesMatchTheModel(t *testing.T) {
 	if tel.RSSI == nil || tel.UptimeS == nil {
 		t.Error("the telemetry example should show the optional rssi/uptime_s fields")
 	}
+	if tel.RainLevel == nil || tel.RainWet == nil {
+		t.Error("the telemetry example should show the rain sensor fields rain_level/rain_wet")
+	}
 
 	var w DeviceWeather
 	if err := strict(block("weather"), &w); err != nil {

@@ -18,6 +18,8 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
   "temp": 29.5,
   "humidity": 71,
   "light": 2300,
+  "rain_level": 30,
+  "rain_wet": false,
   "state": "OPEN",
   "mode": "AUTO",
   "rain": false,
@@ -30,8 +32,12 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
 }
 ```
 - `temp`, `humidity`: `null` nếu DHT11 đọc lỗi. `light`: 0..4095, **cao = sáng** (firmware đã đảo cực tính nếu cần). Module quang trở của kit chỉ có ngõ số nên `light` chỉ ở gần 0 hoặc gần 4095.
+- `rain_level`, `rain_wet`: cảm biến mưa YL-83 (chân AO vào GPIO35). `rain_level` là 0..4095 đã chuẩn hoá, **cao = ướt** (gần 0 khi tấm khô).
+  `rain_wet` là kết luận ướt/khô sau hai ngưỡng có độ trễ (`RAIN_WET_ABOVE` và `RAIN_DRY_BELOW` trong `config.h`). Cả hai là `null` nếu firmware được biên dịch
+  không có cảm biến (`RAIN_SENSOR_ENABLED 0`) hoặc chưa có lần đọc nào.
 - `state`: `OPEN | CLOSING | CLOSED | OPENING | ERROR`. `mode`: `AUTO | MANUAL`.
-- `rain_source`: `none | api | sim | local`. `weather_age_s`: `-1` nếu chưa nhận bản tin thời tiết nào.
+- `rain_source`: `none | api | sim | sensor | local`. Khi nhiều nguồn cùng báo mưa thì ghi theo thứ tự ưu tiên `sim` > `sensor` > `api` > `local`.
+  `weather_age_s`: `-1` nếu chưa nhận bản tin thời tiết nào.
 - Không có `ts`: backend gán thời gian khi nhận.
 
 ### `cmd` (backend → ESP32)
@@ -48,6 +54,8 @@ nhưng bỏ qua bản tin nếu `age_s` âm, thiếu, không phải số, hoặc
 - **`weather` không retained + có `age_s`.** Nếu retained, khi ESP32 khởi động lại nó sẽ nhận ngay một bản tin *cũ* mà không biết cũ bao lâu,
   và nếu tính tuổi từ lúc nhận thì bản tin cũ trông như mới. Với `age_s`, ESP32 tính tuổi = `age_s` + thời gian đã trôi từ lúc nhận (bằng `millis()`),
   không cần NTP. Backend publish lại mỗi 60 giây và ngay khi thấy `status = online`. Nếu Open-Meteo hỏng, backend vẫn publish bản cache nhưng `age_s` tăng dần.
+- **Cảm biến mưa bổ sung cho Open-Meteo, không thay thế.** API cho biết "sắp mưa" nên thu giàn *trước* khi ướt; tấm cảm biến cho biết "đang mưa ở đây" nên vẫn đúng khi
+  API sai vị trí hoặc backend mất mạng. Mỗi nguồn che điểm yếu của nguồn kia, và thiếu một trong hai thì hệ thống vẫn chạy.
 - **`telemetry` không retained.** Nếu retained, backend khởi động lại sẽ nhận số liệu cũ và gán `ts` là bây giờ, làm sai `last_seen`.
 - **`cmd` không retained.** Nếu ESP32 offline rồi online lại, nó không được chạy lại lệnh cũ (tránh giàn tự chạy vì lệnh từ hôm qua).
   Vì vậy backend trả 409 khi thiết bị offline thay vì im lặng làm mất lệnh.
@@ -57,6 +65,7 @@ nhưng bỏ qua bản tin nếu `age_s` âm, thiếu, không phải số, hoặc
 | Hằng số | Giá trị | Ý nghĩa |
 |---|---|---|
 | Xác nhận mưa | 30 giây | Mưa liên tục ≥ 30 giây mới thu giàn. Giả lập mưa (`sim`) thu ngay |
+| Xác nhận mưa bằng cảm biến | 5 giây | Tấm cảm biến ướt liên tục ≥ 5 giây thì thu giàn (lọc giọt bắn). Tấm khô lại thì vẫn chờ "Xác nhận khô" như dưới đây |
 | Xác nhận khô | 15 phút | Khô liên tục ≥ 15 phút mới mở lại |
 | Thời tiết cũ | 30 phút | `age` > 30 phút thì vào fail-safe. Chưa từng nhận bản tin nào thì chờ tối đa 2 phút sau khi khởi động |
 | Fail-safe | độ ẩm ≥ 85% **và** `light` < 800 | Coi là mưa (`rain_source = local`). Ngược lại giữ nguyên trạng thái, không tự mở lại |
@@ -64,7 +73,9 @@ nhưng bỏ qua bản tin nếu `age_s` âm, thiếu, không phải số, hoặc
 | Hành trình tối đa | 30 giây | Không chạm công tắc hành trình trong 30 giây → `ERROR`, tắt relay |
 | Dead time relay | 200 ms | Đảo chiều: tắt kênh này, đợi 200 ms mới bật kênh kia. Không bao giờ bật cả hai |
 
-Mưa = `weather.is_raining` **hoặc** `weather.rain_expected_15m` **hoặc** đang giả lập mưa.
+Mưa = `weather.is_raining` **hoặc** `weather.rain_expected_15m` **hoặc** cảm biến mưa đang ướt (`rain_wet`) **hoặc** đang giả lập mưa.
+Cảm biến ướt có tác dụng cả khi thời tiết chưa có hoặc đã cũ, và `fail_safe` vẫn báo `true` nếu thời tiết cũ.
+Hai ngưỡng của cảm biến có độ trễ: ướt khi `rain_level` ≥ `RAIN_WET_ABOVE`, khô lại khi ≤ `RAIN_DRY_BELOW`, ở giữa thì giữ kết luận cũ.
 Ở trạng thái "không biết" (thời tiết cũ nhưng chưa đủ điều kiện fail-safe) cả hai bộ đếm thời gian được reset, giàn giữ nguyên.
 
 ### Thoát khỏi `ERROR`

@@ -8,6 +8,8 @@ import (
 )
 
 func f(v float64) *float64 { return &v }
+func ip(v int) *int        { return &v }
+func bp(v bool) *bool      { return &v }
 
 func valid() DeviceTelemetry {
 	return DeviceTelemetry{Temp: f(30), Humidity: f(60), Light: 1000, State: StateOpen, Mode: ModeAuto,
@@ -23,17 +25,31 @@ func TestValidate(t *testing.T) {
 	if err := nullSensors.Validate(); err != nil {
 		t.Errorf("null sensor readings must be accepted: %v", err)
 	}
+	noSensor := valid() // rain_level / rain_wet are null on a device without a rain sensor and on old firmware
+	noSensor.RainLevel, noSensor.RainWet = nil, nil
+	if err := noSensor.Validate(); err != nil {
+		t.Errorf("null rain sensor fields must be accepted: %v", err)
+	}
+	for _, level := range []int{0, 1, 4095} {
+		d := valid()
+		d.RainLevel, d.RainWet = ip(level), bp(level > 0)
+		if err := d.Validate(); err != nil {
+			t.Errorf("rain_level %d rejected: %v", level, err)
+		}
+	}
 	bad := map[string]func(*DeviceTelemetry){
-		"state":        func(d *DeviceTelemetry) { d.State = "FLYING" },
-		"mode":         func(d *DeviceTelemetry) { d.Mode = "" },
-		"rain_source":  func(d *DeviceTelemetry) { d.RainSource = "cloud" },
-		"light high":   func(d *DeviceTelemetry) { d.Light = 4096 },
-		"light low":    func(d *DeviceTelemetry) { d.Light = -1 },
-		"age":          func(d *DeviceTelemetry) { d.WeatherAgeS = -2 },
-		"manual_left":  func(d *DeviceTelemetry) { d.ManualLeftS = -1 },
-		"temp":         func(d *DeviceTelemetry) { d.Temp = f(500) },
-		"humidity":     func(d *DeviceTelemetry) { d.Humidity = f(101) },
-		"humidity low": func(d *DeviceTelemetry) { d.Humidity = f(-1) },
+		"rain_level high": func(d *DeviceTelemetry) { d.RainLevel = ip(4096) },
+		"rain_level low":  func(d *DeviceTelemetry) { d.RainLevel = ip(-1) },
+		"state":           func(d *DeviceTelemetry) { d.State = "FLYING" },
+		"mode":            func(d *DeviceTelemetry) { d.Mode = "" },
+		"rain_source":     func(d *DeviceTelemetry) { d.RainSource = "cloud" },
+		"light high":      func(d *DeviceTelemetry) { d.Light = 4096 },
+		"light low":       func(d *DeviceTelemetry) { d.Light = -1 },
+		"age":             func(d *DeviceTelemetry) { d.WeatherAgeS = -2 },
+		"manual_left":     func(d *DeviceTelemetry) { d.ManualLeftS = -1 },
+		"temp":            func(d *DeviceTelemetry) { d.Temp = f(500) },
+		"humidity":        func(d *DeviceTelemetry) { d.Humidity = f(101) },
+		"humidity low":    func(d *DeviceTelemetry) { d.Humidity = f(-1) },
 	}
 	for name, mutate := range bad {
 		d := valid()
@@ -53,7 +69,7 @@ func TestTelemetryJSONShape(t *testing.T) {
 	}
 	var m map[string]any
 	json.Unmarshal(b, &m)
-	for _, k := range []string{"ts", "temp", "humidity", "light", "state", "mode", "rain", "rain_source", "weather_age_s", "fail_safe", "manual_left_s"} {
+	for _, k := range []string{"ts", "temp", "humidity", "light", "rain_level", "rain_wet", "state", "mode", "rain", "rain_source", "weather_age_s", "fail_safe", "manual_left_s"} {
 		if _, ok := m[k]; !ok {
 			t.Errorf("missing key %q in %s", k, b)
 		}

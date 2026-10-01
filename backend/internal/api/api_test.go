@@ -60,12 +60,14 @@ func (f *fakeBackend) DeviceOnline() bool  { return f.state.Online }
 var t0 = time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 
 func f64(v float64) *float64 { return &v }
+func i32(v int) *int         { return &v }
+func yes(v bool) *bool       { return &v }
 
 func onlineState() model.State {
 	ts := t0
 	return model.State{Online: true, LastSeen: &ts, Telemetry: &model.Telemetry{TS: ts, DeviceTelemetry: model.DeviceTelemetry{
-		Temp: f64(29.5), Humidity: f64(71), Light: 2300, State: model.StateOpen, Mode: model.ModeAuto,
-		RainSource: model.RainNone, WeatherAgeS: 45, ManualLeftS: 0,
+		Temp: f64(29.5), Humidity: f64(71), Light: 2300, RainLevel: i32(30), RainWet: yes(false),
+		State: model.StateOpen, Mode: model.ModeAuto, RainSource: model.RainNone, WeatherAgeS: 45, ManualLeftS: 0,
 	}}}
 }
 

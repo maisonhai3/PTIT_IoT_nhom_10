@@ -38,15 +38,16 @@ func (m Mode) Valid() bool { return m == ModeAuto || m == ModeManual }
 type RainSource string
 
 const (
-	RainNone  RainSource = "none"
-	RainAPI   RainSource = "api"
-	RainSim   RainSource = "sim"
-	RainLocal RainSource = "local"
+	RainNone   RainSource = "none"
+	RainAPI    RainSource = "api"
+	RainSim    RainSource = "sim"
+	RainSensor RainSource = "sensor" // the rain plate on the device is wet
+	RainLocal  RainSource = "local"
 )
 
 func (r RainSource) Valid() bool {
 	switch r {
-	case RainNone, RainAPI, RainSim, RainLocal:
+	case RainNone, RainAPI, RainSim, RainSensor, RainLocal:
 		return true
 	}
 	return false
@@ -76,6 +77,8 @@ type DeviceTelemetry struct {
 	Temp        *float64    `json:"temp"`
 	Humidity    *float64    `json:"humidity"`
 	Light       int         `json:"light"`
+	RainLevel   *int        `json:"rain_level"` // rain plate, 0..4095, high = wet; null without a sensor
+	RainWet     *bool       `json:"rain_wet"`   // the device's wet/dry verdict for the plate; null without a sensor
 	State       AwningState `json:"state"`
 	Mode        Mode        `json:"mode"`
 	Rain        bool        `json:"rain"`
@@ -100,6 +103,9 @@ func (t DeviceTelemetry) Validate() error {
 	}
 	if t.Light < 0 || t.Light > 4095 {
 		return fmt.Errorf("light %d out of range 0..4095", t.Light)
+	}
+	if t.RainLevel != nil && (*t.RainLevel < 0 || *t.RainLevel > 4095) {
+		return fmt.Errorf("rain_level %d out of range 0..4095", *t.RainLevel)
 	}
 	if t.WeatherAgeS < -1 {
 		return fmt.Errorf("weather_age_s %d < -1", t.WeatherAgeS)

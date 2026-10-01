@@ -118,6 +118,16 @@ func TestContractResponses(t *testing.T) {
 	check(t, router, h, "POST", "/api/command", `{"action":"open"}`, auth, 503)
 }
 
+// A device without a rain sensor (or old firmware that predates the fields) reports rain_level / rain_wet as null;
+// the contract has to accept that on /api/state.
+func TestContractDeviceWithoutRainSensor(t *testing.T) {
+	_, router := loadSpec(t)
+	fb := richBackend()
+	fb.state.Telemetry.RainLevel, fb.state.Telemetry.RainWet = nil, nil
+	h := New(fb, hub.New(nil), Options{}).Handler()
+	check(t, router, h, "GET", "/api/state", "", nil, 200)
+}
+
 func TestContractEmptyAndDegradedStates(t *testing.T) {
 	_, router := loadSpec(t)
 	h := New(&fakeBackend{}, hub.New(nil), Options{}).Handler()
@@ -160,7 +170,7 @@ func TestContractEnumsMatchGoModel(t *testing.T) {
 			t.Errorf("Action %q in spec but invalid in Go", v)
 		}
 	}
-	if len(enum("AwningState")) != 5 || len(enum("Mode")) != 2 || len(enum("RainSource")) != 4 || len(cmd) != 5 {
+	if len(enum("AwningState")) != 5 || len(enum("Mode")) != 2 || len(enum("RainSource")) != 5 || len(cmd) != 5 {
 		t.Error("enum sizes differ from the Go model: update model.go and this test together")
 	}
 	kinds := doc.Components.Schemas["Event"].Value.Properties["kind"].Value.Enum
