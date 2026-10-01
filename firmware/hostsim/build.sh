@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Biên dịch CHÍNH các file nguồn firmware (src/, lib/) cho Linux, chạy trên các stub trong stubs/.
-# Kết quả: ../.pio/hostsim/fwsim_demo (DEMO_FAST_TIMERS) và fwsim_prod (thời gian thật).
+# Kết quả: ../.pio/hostsim/fwsim_demo (DEMO_FAST_TIMERS), fwsim_prod (thời gian thật) và fwsim_pwr
+# (như fwsim_demo nhưng cảm biến mưa chỉ có điện khi đo: RAIN_PWR_PIN=18).
 # Cần chạy `pio run` hoặc `pio test -e native` một lần trước để .pio/libdeps có PubSubClient và ArduinoJson.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -28,3 +29,4 @@ build() { # $1 = hậu tố, còn lại = cờ biên dịch thêm
 }
 build demo -DDEMO_FAST_TIMERS=1
 build prod
+build pwr -DDEMO_FAST_TIMERS=1 -DRAIN_PWR_PIN=18

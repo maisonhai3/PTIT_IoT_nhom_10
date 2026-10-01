@@ -60,12 +60,17 @@ int g_dir[64];
 int g_outReg[64];
 std::atomic<int> g_in[64];
 std::atomic<int> g_ldr{2000};
+// Raw ADC at the rain plate's AO pin, as the YL-83 module delivers it: ~4095 when the plate is dry, falling toward 0 as it wets.
+std::atomic<int> g_rain{4095};
 std::atomic<int> g_dhtT10{290}, g_dhtH10{710};
 std::atomic<bool> g_dhtNan{false};
 std::atomic<int> g_hangReadMs{0};
 bool g_relayOn[2] = {false, false};
 int64_t g_lastOff[2] = {-1, -1};
 bool g_buzzerOn = false;
+#if RAIN_PWR_PIN >= 0
+bool g_rainPowered = false;  // RAIN_PWR_PIN driven high: the rain module has power
+#endif
 
 bool relayLogicalOn(int pin) {
   const int onLevel = RELAY_ACTIVE_LOW ? LOW : HIGH;
@@ -142,6 +147,15 @@ void digitalWrite(uint8_t pin, uint8_t val) {
       emit("@@BUZ %llu %d", static_cast<unsigned long long>(hostMs()), on ? 1 : 0);
     }
   }
+#if RAIN_PWR_PIN >= 0
+  if (pin == RAIN_PWR_PIN) {
+    const bool on = g_dir[pin] == OUTPUT && val == HIGH;
+    if (on != g_rainPowered) {
+      g_rainPowered = on;
+      emit("@@RAINPWR %llu %d", static_cast<unsigned long long>(hostMs()), on ? 1 : 0);
+    }
+  }
+#endif
 }
 
 int digitalRead(uint8_t pin) {
@@ -149,7 +163,18 @@ int digitalRead(uint8_t pin) {
   if (hang > 0) std::this_thread::sleep_for(std::chrono::milliseconds(hang));  // wedged peripheral
   return g_in[pin].load();
 }
-int analogRead(uint8_t) { return g_ldr.load(); }
+int analogRead(uint8_t pin) {
+  if (pin == PIN_RAIN_AO) {
+#if RAIN_PWR_PIN >= 0
+    // The module only has power while the firmware holds RAIN_PWR_PIN high; unpowered, AO is not driven and reads
+    // ~0, which the firmware would take for a soaked plate: so a reading taken at the wrong moment shows up at once.
+    std::lock_guard<std::mutex> lock(g_hw);
+    if (!g_rainPowered) return 0;
+#endif
+    return g_rain.load();
+  }
+  return g_ldr.load();
+}
 void analogReadResolution(uint8_t) {}
 void analogSetPinAttenuation(uint8_t, int) {}
 
@@ -337,6 +362,8 @@ void startStdinThread() {
         g_in[pin] = v;
       } else if (sscanf(line, "ldr %d", &v) == 1) {
         g_ldr = v;
+      } else if (sscanf(line, "rain %d", &v) == 1) {
+        g_rain = v;
       } else if (sscanf(line, "dht %f %f", &t, &h) == 2) {
         g_dhtNan = false;
         g_dhtT10 = static_cast<int>(t * 10);

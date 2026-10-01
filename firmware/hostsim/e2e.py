@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end check of the REAL firmware sources (host build, stubbed Arduino/FreeRTOS/WiFi)
 against a REAL Mosquitto using the repo's ACL. Plays the role of the Go backend.
-Usage: python3 e2e.py [s1 s2 ... s11]   (no argument = every scenario, ~7 minutes)"""
+Usage: python3 e2e.py [s1 s2 ... s13]   (no argument = every scenario, ~9 minutes)"""
 import json
 import os
 import re
@@ -20,8 +20,8 @@ REPO = os.path.dirname(FW)                        # repo root (deploy/mosquitto/
 OUT = os.path.join(FW, ".pio", "hostsim")         # binaries and runtime files (gitignored)
 HOST, PORT = "127.0.0.1", 28830
 PFX = "pkg/awning01/"
-KEYS = ["temp", "humidity", "light", "state", "mode", "rain", "rain_source", "weather_age_s",
-        "fail_safe", "manual_left_s", "rssi", "uptime_s"]
+KEYS = ["temp", "humidity", "light", "rain_level", "rain_wet", "state", "mode", "rain", "rain_source",
+        "weather_age_s", "fail_safe", "manual_left_s", "rssi", "uptime_s"]
 
 results = []
 
@@ -126,6 +126,7 @@ class Firmware:
         self.lines = []       # (wall, text)
         self.relay = []       # (wall, ch1, ch2)
         self.buz = []         # (wall, on)
+        self.rainpwr = []     # (firmware seconds, on): RAIN_PWR_PIN edges, only in the fwsim_pwr build
         self.oled = []        # (wall, text)
         self.violation = None
         self.t0 = time.time()
@@ -143,6 +144,9 @@ class Firmware:
                     self.relay.append((now, int(a), int(b)))
                 elif line.startswith("@@BUZ"):
                     self.buz.append((now, int(line.split()[2])))
+                elif line.startswith("@@RAINPWR"):
+                    _, ms, on = line.split()
+                    self.rainpwr.append((int(ms) / 1000.0, int(on)))
                 elif line.startswith("@@OLED"):
                     self.oled.append((now, line.split(" ", 2)[2] if line.count(" ") >= 2 else ""))
                 elif line.startswith("@@VIOLATION"):
@@ -244,6 +248,8 @@ def s1_boot_and_contract(be):
     later = tel[-1]
     check("temp/humidity numbers after DHT read", later["temp"] == 29 and later["humidity"] == 71,
           f"{later['temp']},{later['humidity']}")
+    check("dry rain plate: rain_level 0, rain_wet false", later["rain_level"] == 0 and later["rain_wet"] is False,
+          f"{later['rain_level']},{later['rain_wet']}")
     # retained status seen by a late subscriber
     got = []
     late = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="late-sub")
@@ -529,6 +535,127 @@ def s11_rollover(be):
     fw.stop()
 
 
+def log_wet(fw, level, wet, timeout, since):
+    """The 1 Hz control log line carries the controller's verdict for the plate (what the web cannot show between frames)."""
+    return fw.wait_line(rf"rain_level={level} wet={1 if wet else 0}\b", timeout, since=since)
+
+
+def s12_rain_plate(be):
+    print("\n[S12] rain plate on GPIO35: wet -> source sensor -> close, no weather needed; hysteresis; splash; dry is not proof")
+    # The ADC value is what the YL-83 puts on AO: ~4095 dry, falling when wet. Firmware reports level = 4095 - raw.
+    fw = boot(be)                                        # note: the backend sends NO weather in this part
+    t = be.wait_tel(lambda d: d["rain_level"] is not None, 4, since=time.time() - 3)
+    check("dry plate: rain_level 0, rain_wet false, source none", t is not None and (t["rain_level"], t["rain_wet"], t["rain_source"]) == (0, False, "none"),
+          str(t and (t["rain_level"], t["rain_wet"], t["rain_source"])))
+
+    ta = time.time()
+    fw.send("rain 1500")                                 # level 2595
+    t = be.wait_tel(lambda d: d["rain_wet"] is True, 3, since=ta)
+    check("wet plate published at once (change-triggered frame): level 2595, rain, source sensor",
+          t is not None and t["_t"] - ta < 1.6 and (t["rain_level"], t["rain"], t["rain_source"]) == (2595, True, "sensor"),
+          f"{(t['_t'] - ta):.2f}s {t['rain_level']} {t['rain']} {t['rain_source']}" if t else "no frame")
+    check("no weather needed: weather_age_s -1 and no fail_safe inside the first-weather grace",
+          t is not None and t["weather_age_s"] == -1 and t["fail_safe"] is False)
+    t = be.wait_tel(lambda d: d["state"] == "CLOSING", 6, since=ta)
+    dt = (t["_t"] - ta) if t else None
+    check("CLOSING ~2 s after the plate got wet (sensor confirm, not the 3 s forecast one)", t is not None and 1.9 <= dt <= 2.9,
+          f"{dt:.2f}s" if dt else "")
+    time.sleep(0.9)
+    pulses = [b for (w, b) in fw.buz if ta + 1.5 <= w <= ta + 6 and b == 1]
+    check("buzzer: 3 beeps when the sensor starts the close", len(pulses) == 3, f"pulses={len(pulses)}")
+    check("CLOSED after the simulated travel", be.wait_tel(lambda d: d["state"] == "CLOSED", 7, since=ta) is not None)
+
+    # Hysteresis on the closed awning: the verdict is visible in the 1 Hz control log.
+    th = time.time()
+    fw.send("rain 3800")                                 # level 295: between the thresholds -> stays wet
+    check("295 (between 200 and 400) keeps a wet plate wet", log_wet(fw, 295, True, 3, th) is not None)
+    th = time.time()
+    fw.send("rain 3896")                                 # level 199 <= 200 -> dry
+    check("199 (<= RAIN_DRY_BELOW) turns it dry", log_wet(fw, 199, False, 3, th) is not None)
+    th = time.time()
+    fw.send("rain 3800")
+    check("295 keeps a dry plate dry", log_wet(fw, 295, False, 3, th) is not None)
+    th = time.time()
+    fw.send("rain 3695")                                 # level 400 >= RAIN_WET_ABOVE -> wet (inclusive)
+    check("400 (>= RAIN_WET_ABOVE) turns it wet", log_wet(fw, 400, True, 3, th) is not None)
+
+    # A dry plate is no proof of dry weather: with no forecast the awning stays closed however long it is dry.
+    fw.send("rain 4095")
+    td = time.time()
+    t = be.wait_tel(lambda d: not d["rain"], 3, since=td)
+    check("plate dry again: rain false, source none", t is not None and t["rain_source"] == "none")
+    time.sleep(23)                                       # > 20 s demo dry-confirm
+    last = be.last()
+    check("no forecast + dry plate: the awning is NOT reopened (dry plate is no evidence)", last["state"] == "CLOSED",
+          last["state"])
+    # A fresh forecast saying dry is evidence: reopen after the dry confirm.
+    tf = time.time()
+    be.weather(False)
+    t = be.wait_tel(lambda d: d["state"] in ("OPENING", "OPEN"), 26, since=tf)
+    check("fresh dry forecast + dry plate: reopens after the dry confirmation (~20 s)", t is not None and 18 <= t["_t"] - tf <= 25,
+          f"{(t['_t'] - tf):.1f}s" if t else "")
+    check("OPEN again", be.wait_tel(lambda d: d["state"] == "OPEN", 7, since=tf) is not None)
+
+    # A splash shorter than the confirm time must not move the awning.
+    ts = time.time()
+    fw.send("rain 1500")
+    time.sleep(1.0)
+    fw.send("rain 4095")
+    time.sleep(4.5)
+    tel = [x for x in be.telemetry() if x["_t"] >= ts]
+    check("splash of ~1 s: seen as wet but the awning never moved",
+          any(x["rain_wet"] for x in tel) and not any(x["state"] != "OPEN" for x in tel),
+          str([(x["rain_wet"], x["state"]) for x in tel]))
+
+    # An out-of-range reading is clamped instead of producing a frame the backend would reject (level would be negative).
+    fw.send("rain 3000")                                 # level 1095, wet for ~1 s: still under the 2 s confirm
+    time.sleep(1.2)
+    tc = time.time()
+    fw.send("rain 99999")
+    check("a reading above 4095 is clamped: rain_level 0, not negative", log_wet(fw, 0, False, 3, tc) is not None)
+    check("no relay violation observed", fw.violation is None, str(fw.violation))
+    fw.stop()
+
+
+def s13_rain_power_gate(be):
+    print("\n[S13] RAIN_PWR_PIN=18: the module has power only while it is being measured")
+    fw = boot(be, "fwsim_pwr")
+    be.weather(False)
+    t0 = time.time()
+    time.sleep(7)
+    on = [w for (w, v) in fw.rainpwr if v == 1]
+    off = [w for (w, v) in fw.rainpwr if v == 0]
+    check("the pin is pulsed regularly (>= 10 power-ups in ~7 s)", len(on) >= 10, f"{len(on)} power-ups")
+    pairs = []
+    for w, v in fw.rainpwr:
+        if v == 1:
+            pairs.append([w, None])
+        elif pairs and pairs[-1][1] is None:
+            pairs[-1][1] = w
+    done = [(a, b) for a, b in pairs if b is not None]
+    lengths = [b - a for a, b in done]
+    gaps = [b[0] - a[0] for a, b in zip(pairs, pairs[1:])]
+    check("each power-up lasts at least RAIN_SETTLE_MS (20 ms) and not much longer", lengths and all(0.019 <= d <= 0.15 for d in lengths),
+          f"min={min(lengths) * 1000:.0f} ms max={max(lengths) * 1000:.0f} ms" if lengths else "no pulses")
+    check("one reading every ~500 ms", gaps and all(0.45 <= g <= 0.8 for g in gaps), f"min={min(gaps):.2f}s max={max(gaps):.2f}s" if gaps else "")
+    span = pairs[-1][0] - pairs[0][0] if len(pairs) > 1 else 0
+    duty = sum(lengths) / span if span else 1
+    check("the module is unpowered >= 85% of the time", duty < 0.15, f"duty {duty * 100:.1f}%")
+    tel = [x for x in be.telemetry() if x["_t"] >= t0]
+    check("every reading was taken while powered: a dry plate never looked wet (an unpowered AO reads ~0 = soaked)",
+          tel and all(x["rain_wet"] is not True and x["rain_level"] in (None, 0) for x in tel),
+          str([(x["rain_wet"], x["rain_level"]) for x in tel if x["rain_wet"] is not False]))
+
+    ta = time.time()
+    fw.send("rain 1500")
+    t = be.wait_tel(lambda d: d["rain_wet"] is True, 3, since=ta)
+    check("wet plate through the gated supply: level 2595, source sensor", t is not None and (t["rain_level"], t["rain_source"]) == (2595, "sensor"),
+          str(t and (t["rain_level"], t["rain_source"])))
+    check("AUTO closes the awning", be.wait_tel(lambda d: d["state"] == "CLOSING", 6, since=ta) is not None)
+    check("no relay violation observed", fw.violation is None, str(fw.violation))
+    fw.stop()
+
+
 class Mosq:
     """Throw-away Mosquitto on 127.0.0.1:28830 using the repo's real ACL (deploy/mosquitto/acl)."""
 
@@ -567,7 +694,7 @@ def main():
     scenarios = [("s1", s1_boot_and_contract), ("s2", s2_rain_close_reopen), ("s3", s3_commands),
                  ("s4", s4_limit_switch_latency), ("s5", s5_stale_failsafe_hold), ("s6", s6_sensor_failure),
                  ("s7", s7_wifi_drop_and_reconnect), ("s8", None), ("s9", s9_watchdog), ("s10", s10_boot_states),
-                 ("s11", s11_rollover)]
+                 ("s11", s11_rollover), ("s12", s12_rain_plate), ("s13", s13_rain_power_gate)]
     try:
         for name, fn in scenarios:
             if only and name not in only:

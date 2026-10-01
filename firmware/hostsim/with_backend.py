@@ -221,6 +221,23 @@ def run(tmp):
     fwcmd("dht 29 71")
     wait(lambda: tel()["temp"] == 29, 12)
 
+    print("5b. cảm biến mưa YL-83: firmware thật -> backend thật -> web (tấm khô, rồi tấm ướt trong khi Open-Meteo báo khô)")
+    t = tel()
+    check("tấm khô: rain_level 0, rain_wet false (số thật, không phải null)", t["rain_level"] == 0 and t["rain_wet"] is False,
+          f"{t['rain_level']}, {t['rain_wet']}")
+    fwcmd("rain 1500")  # AO còn 1500/4095: tấm ướt, rain_level chuẩn hoá = 4095 - 1500
+    check("tấm ướt: rain_level 2595, rain_wet true, nguồn sensor (thời tiết vẫn khô)",
+          wait(lambda: tel()["rain_wet"] is True and tel()["rain_level"] == 2595 and tel()["rain_source"] == "sensor", 8) is not None,
+          str({k: tel()[k] for k in ("rain_level", "rain_wet", "rain_source")}))
+    d = wait(lambda: tel()["state"] == "CLOSED" and tel()["mode"] == "AUTO", 15)
+    check("AUTO tự thu giàn vì cảm biến mưa dù Open-Meteo báo khô", d is not None, f"{d and round(d, 1)}s")
+    events = get("/api/events?limit=50")
+    check("nhật ký của backend có sự kiện mưa với nguồn sensor", any(e["kind"] == "rain" and e["detail"] == "sensor" for e in events))
+    fwcmd("rain 4095")
+    check("tấm khô lại: rain_wet false", wait(lambda: tel()["rain_wet"] is False and tel()["rain_source"] == "none", 8) is not None)
+    d = wait(lambda: tel()["state"] == "OPEN", 60)
+    check("khô + Open-Meteo khô: tự mở lại sau thời gian xác nhận khô (bản demo)", d is not None, f"{d and round(d)}s")
+
     print("6. mưa từ Open-Meteo làm firmware thật tự thu, hết mưa thì tự mở (chờ chu kỳ hỏi thời tiết 1 phút)")
     post("open")
     wait(lambda: tel()["state"] == "OPEN", 15)
