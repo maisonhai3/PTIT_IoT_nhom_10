@@ -1,0 +1,3 @@
+# Script chạy trong Git Bash, WSL hoặc Linux: giữ LF dù Windows đặt core.autocrlf=true
+# (CRLF làm bash báo lỗi kiểu "set: pipefail\r: invalid option name").
+*.sh text eol=lf

@@ -25,7 +25,9 @@ if command -v mosquitto_passwd >/dev/null 2>&1; then
   mosquitto_passwd -b passwd esp32-awning01 "$ESP32_PASS"
   mosquitto_passwd -b passwd backend "$BACKEND_PASS"
 else
-  docker run --rm -e ESP32_PASS -e BACKEND_PASS -v "$PWD:/work" -w /work eclipse-mosquitto:2 sh -c '
+  # Cùng phiên bản với image trong docker-compose.yml.
+  # MSYS_NO_PATHCONV: Git Bash trên Windows không được tự đổi "/work" thành đường dẫn Windows (biến này bị bỏ qua ở nơi khác).
+  MSYS_NO_PATHCONV=1 docker run --rm -e ESP32_PASS -e BACKEND_PASS -v "$PWD:/work" -w /work eclipse-mosquitto:2.0.18 sh -c '
     mosquitto_passwd -b passwd esp32-awning01 "$ESP32_PASS" &&
     mosquitto_passwd -b passwd backend "$BACKEND_PASS"'
 fi

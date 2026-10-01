@@ -2,7 +2,9 @@
 # Mosquitto: broker MQTT trong LAN. backend: API + giao diện web (http://<IP máy>:8080).
 services:
   mosquitto:
-    image: eclipse-mosquitto:2
+    # Ghim đúng phiên bản đã kiểm chứng. Thẻ "2" hiện trỏ tới Mosquitto 2.1.x, bản chưa được thử với cấu hình này
+    # (từ 2.0.16 broker đã cảnh báo sẽ từ chối file mật khẩu/ACL không đúng chủ sở hữu hoặc quyền). Nâng cấp là một việc có chủ ý.
+    image: eclipse-mosquitto:2.0.18
     container_name: awning-mosquitto
     restart: unless-stopped
     ports:

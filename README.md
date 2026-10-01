@@ -40,7 +40,10 @@ Cần một máy luôn bật trong cùng mạng LAN với ESP32 (laptop, mini-PC
    cp ../backend/.env.example ../backend/.env      # điền MQTT_USER=backend, MQTT_PASSWORD, toạ độ (WEATHER_LAT/LON)
    docker compose up -d --build                    # web: http://<IP máy>:8080
    ```
-   Không dùng Docker? Chạy Mosquitto tự cài với `deploy/mosquitto/mosquitto.conf` rồi `cd backend && go run ./cmd/server`.
+   Kiểm tra: `docker compose ps` báo hai dịch vụ đang chạy, và `curl http://localhost:8080/healthz` trả `"mqtt_connected":true` (thêm `"device_online":true` khi ESP32 đã nối).
+
+   Không dùng Docker? Cài Mosquitto 2.0.x, chép `deploy/mosquitto/mosquitto.conf` rồi đổi ba đường dẫn `/mosquitto/...` (file mật khẩu, ACL, thư mục dữ liệu) thành đường dẫn thật;
+   hai file đầu phải đọc được bởi tài khoản chạy Mosquitto. Sau đó `cd backend && go run ./cmd/server`.
 2. **ESP32**: nối dây theo [`docs/wiring.md`](docs/wiring.md) (hoặc mở trang tương tác `docs/wiring-guide.html` bằng trình duyệt), copy `firmware/include/secrets.h.example` thành `secrets.h` (WiFi, IP máy chạy broker, mật khẩu thiết bị),
    rồi nạp bằng PlatformIO. Chi tiết và cách hiệu chỉnh quang trở: [`firmware/README.md`](firmware/README.md).
 3. Mở web, chờ huy hiệu **Thiết bị: online**.
@@ -127,5 +130,5 @@ Trong môi trường phát triển của dự án (Linux, không có phần cứ
 **Chưa kiểm chứng** (cần bạn thử, xem [`docs/bringup.md`](docs/bringup.md)):
 - **Chạy trên ESP32 thật**: cực tính quang trở, mức kích relay (một số module 5 V kích mức thấp không nhả hẳn khi chân ra 3,3 V), độ ổn định WiFi/MQTT của `WiFiClient` thật, timing thật của DHT11 và OLED,
   watchdog reset thật, và dung lượng stack của các task (net 10 KB, loop 8 KB chưa đo `high-water mark`). Phần đã chạy ở trên dùng phần cứng giả. Chưa thử Arduino core 3.x (platform được ghim ở `espressif32@6.9.0`).
-- **`docker compose up`** (Mosquitto và backend chạy trong container, kể cả nhánh dùng Docker của `gen-passwd.sh`): môi trường phát triển không có Docker daemon nên compose mới chỉ được đọc lại và kiểm tra cú pháp. Riêng `docker build` image backend đã đạt trong CI.
+- **`docker compose up`** (Mosquitto và backend chạy trong container, kể cả nhánh dùng Docker của `gen-passwd.sh`): môi trường phát triển không có Docker daemon nên compose mới chỉ được đọc lại và kiểm tra cú pháp. Riêng `docker build` image backend đã đạt trong CI. Image Mosquitto được ghim ở 2.0.18 (bản đã kiểm chứng) vì thẻ `2` hiện trỏ tới 2.1.x.
 - Gọi **Open-Meteo thật** (môi trường phát triển không ra được Internet ngoài danh sách cho phép; phần phân tích dùng dữ liệu theo đúng tài liệu API và một máy chủ giả).
