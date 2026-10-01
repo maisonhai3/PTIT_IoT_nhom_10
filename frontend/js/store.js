@@ -19,6 +19,28 @@ export function createStore(initial) {
 
 export const MAX_EVENTS = 50;
 
+const eventKey = (e) => `${e?.ts}|${e?.kind}|${e?.detail}`;
+const eventTime = (e) => Date.parse(e?.ts) || 0;
+
+/**
+ * Gộp hai danh sách sự kiện thành nhật ký: bỏ trùng, mới nhất trước, tối đa MAX_EVENTS.
+ * Có hai đường đưa sự kiện vào trang (REST và WebSocket) và không đường nào được ghi đè đường kia: bản chụp REST có thể
+ * được tính từ trước một sự kiện mà WebSocket vừa đẩy tới, và WebSocket cũng có thể đẩy một sự kiện mà bản chụp đã
+ * chứa. Sự kiện không có id nên định danh là (ts, kind, detail). Khi hai sự kiện cùng mili giây, `incoming` nằm trên.
+ */
+export function mergeEvents(incoming, existing) {
+  const seen = new Set();
+  const all = [];
+  for (const e of [...incoming, ...existing]) {
+    const key = eventKey(e);
+    if (!seen.has(key)) {
+      seen.add(key);
+      all.push(e);
+    }
+  }
+  return all.sort((a, b) => eventTime(b) - eventTime(a)).slice(0, MAX_EVENTS);
+}
+
 /** Áp một tin nhắn `{type, data}` từ WebSocket vào state; trả về phần cần cập nhật (hoặc {} nếu bỏ qua). */
 export function applyMessage(state, msg, receivedAt) {
   if (!msg || typeof msg !== 'object') return {};
@@ -28,7 +50,7 @@ export function applyMessage(state, msg, receivedAt) {
     case 'weather':
       return { weather: msg.data };
     case 'event':
-      return { events: [msg.data, ...state.events].slice(0, MAX_EVENTS) };
+      return { events: mergeEvents([msg.data], state.events) };
     default:
       return {};
   }

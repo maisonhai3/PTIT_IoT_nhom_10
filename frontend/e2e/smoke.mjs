@@ -80,6 +80,10 @@ function stop(demo) {
 }
 
 const text = (page, sel) => page.locator(sel).first().innerText();
+// Ô "Cảm biến mưa" trong thẻ cảm biến (khác ô "Mưa (theo thiết bị)", nơi tên cảm biến chỉ nằm trong dòng phụ).
+const PLATE_TILE = '#sensors .tile:has(.tile-label:text-is("Cảm biến mưa"))';
+const plateValue = (page) => text(page, `${PLATE_TILE} .tile-value`);
+const plateSub = (page) => text(page, `${PLATE_TILE} .tile-sub`);
 const stateTitle = (page) => text(page, '#awning .state-title');
 const waitTitle = (page, expected, timeout = 20000) => page.waitForFunction(
   (want) => document.querySelector('#awning .state-title')?.textContent === want, expected, { timeout });
@@ -112,7 +116,14 @@ let demo = await startDemo(bin);
     assert((await page.title()) === 'Giàn phơi thông minh', 'tiêu đề trang sai');
     assert((await stateTitle(page)) === 'Giàn đang mở', `trạng thái ban đầu: ${await stateTitle(page)}`);
     assert((await text(page, '#weather .wx-temp')).includes('°'), 'thiếu nhiệt độ thời tiết');
-    assert((await page.locator('#sensors .tile').count()) >= 5, 'thiếu ô cảm biến');
+    assert((await page.locator('#sensors .tile').count()) >= 6, 'thiếu ô cảm biến');
+  });
+
+  await step('ô Cảm biến mưa: tấm khô, có số đo thô để chỉnh ngưỡng', async () => {
+    await page.waitForSelector(PLATE_TILE, { timeout: 5000 });
+    assert((await plateValue(page)) === 'Khô', `giá trị: ${await plateValue(page)}`);
+    const m = /Giá trị đo (\d+)\/4095/.exec(await plateSub(page));
+    assert(m && Number(m[1]) < 200, `dòng phụ: ${await plateSub(page)}`);
   });
 
   await step('Thu giàn: đang thu rồi đã thu, chế độ Thủ công, có đếm ngược', async () => {
@@ -139,6 +150,7 @@ let demo = await startDemo(bin);
     await waitTitle(page, 'Giàn đã thu');
     assert((await text(page, '#awning .state-reason')).includes('giả lập mưa'), `lý do: ${await text(page, '#awning .state-reason')}`);
     assert((await page.getAttribute('#sim-switch', 'aria-checked')) === 'true', 'công tắc giả lập không bật');
+    assert((await plateValue(page)) === 'Khô', 'giả lập mưa chỉ là cờ trong firmware, tấm cảm biến vẫn phải khô');
     if (shots) await page.screenshot({ path: path.join(shots, 'sim-rain.png') });
     await page.waitForFunction(() => document.querySelector('#sim-switch')?.disabled === false, null, { timeout: 8000 });
     await page.click('#sim-switch');
@@ -291,6 +303,27 @@ demo = await startDemo(bin, ['-token', 'secret']);
     await waitTitle(page, 'Giàn đang mở');
     assert(!(await page.locator('#token-dialog[open]').count()), 'hộp thoại hỏi lại mã');
   });
+  await ctx.close();
+}
+await stop(demo);
+console.log('\nKịch bản 6: mưa thật làm ướt cảm biến mưa');
+demo = await startDemo(bin, ['-rain-cycle', '10m', '-rain-offset', '8m']); // bắt đầu giữa pha "đang mưa"
+{
+  const { ctx, page, problems } = await newPage();
+  await page.goto(demo.base);
+  await step('tấm ướt: giàn tự thu, lý do và ô cảm biến nêu đúng, nhật ký ghi nguồn cảm biến', async () => {
+    await page.waitForSelector('#pill-device:has-text("online")', { timeout: 15000 });
+    await waitTitle(page, 'Giàn đã thu', 30000);
+    assert((await text(page, '#awning .state-reason')).includes('Cảm biến mưa báo tấm đang ướt'), `lý do: ${await text(page, '#awning .state-reason')}`);
+    await page.waitForSelector(`${PLATE_TILE} .tile-value:text-is("Ướt")`, { timeout: 5000 }); // `:text-is` chỉ có trong bộ chọn của Playwright
+    const m = /Giá trị đo (\d+)\/4095/.exec(await plateSub(page));
+    assert(m && Number(m[1]) >= 400, `dòng phụ: ${await plateSub(page)}`);
+    assert((await text(page, '#sensors')).includes('Nguồn: Cảm biến mưa'), 'ô "Mưa (theo thiết bị)" không nêu nguồn là cảm biến mưa');
+    await page.waitForFunction((want) => document.querySelector('#events')?.innerText.includes(want), 'Có mưa (Cảm biến mưa)', { timeout: 5000 })
+      .catch(async (err) => { throw new Error(`${err.message}\nnhật ký đang hiện:\n${await text(page, '#events')}`); });
+    if (shots) await page.screenshot({ path: path.join(shots, 'plate-wet.png'), fullPage: true });
+  });
+  await step('không có lỗi console', async () => { assert(problems.length === 0, problems.join('\n')); });
   await ctx.close();
 }
 await stop(demo);

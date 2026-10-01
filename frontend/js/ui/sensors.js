@@ -1,7 +1,7 @@
 // Thẻ "Cảm biến tại giàn": số liệu do ESP32 gửi lên.
 import { h, setText, clear } from '../dom.js';
 import { icon, wifiIcon } from '../icons.js';
-import { fmtNumber, fmtCountdown, lightLabel, lightPercent, rainSourceLabel, timeAgo, wifiBars } from '../format.js';
+import { adcPercent, fmtNumber, fmtCountdown, lightLabel, lightPercent, rainPlate, rainSourceLabel, timeAgo, wifiBars } from '../format.js';
 
 function uptimeText(sec) {
   if (sec === undefined || sec === null) return '—';
@@ -30,6 +30,17 @@ export function mountSensors(root, { store, serverNow }) {
       extra ?? null);
   }
 
+  /** Ô cảm biến mưa: Khô/Ướt do firmware kết luận, kèm số đo thô để người lắp mạch tự chỉnh ngưỡng. */
+  function plateTile(t) {
+    const p = rainPlate(t);
+    if (!p) return tile('Cảm biến mưa', 'plate', '—', '', 'Chưa có số liệu từ cảm biến mưa', null, { text: true });
+    const value = p.wet === null ? '—' : p.wet ? 'Ướt' : 'Khô';
+    const sub = p.level === null ? '' : `Giá trị đo ${p.level}/4095 (càng cao càng ướt)`;
+    const meter = p.level === null ? null
+      : h('div', { class: 'meter', 'aria-hidden': 'true' }, h('div', { class: 'meter-fill', 'data-p': Math.round(adcPercent(p.level) / 5) * 5 }));
+    return tile('Cảm biến mưa', 'plate', value, '', sub, meter, { text: true });
+  }
+
   function render(st) {
     const d = st.device;
     const t = d?.telemetry;
@@ -48,6 +59,7 @@ export function mountSensors(root, { store, serverNow }) {
       tile('Độ ẩm', 'drop', t.humidity === null ? '—' : fmtNumber(t.humidity, 0), t.humidity === null ? '' : '%', t.humidity === null ? 'DHT11 đọc lỗi' : 'Cảm biến DHT11'),
       tile('Ánh sáng', 'sun', lightLabel(light), '', `${lightPercent(light)}% (${light}/4095)`,
         h('div', { class: 'meter', 'aria-hidden': 'true' }, h('div', { class: 'meter-fill', 'data-p': Math.round(lightPercent(light) / 5) * 5 })), { text: true }),
+      plateTile(t),
       tile('Mưa (theo thiết bị)', 'rain', t.rain ? 'Có mưa' : 'Không mưa', '',
         [t.rain_source !== 'none' ? `Nguồn: ${rainSourceLabel(t.rain_source)}. ` : '',
           t.weather_age_s < 0 ? 'Chưa nhận thời tiết từ máy chủ.' : `Thời tiết thiết bị nhận: ${timeAgo(t.weather_age_s * 1000)}.`].join(''), null, { text: true }),

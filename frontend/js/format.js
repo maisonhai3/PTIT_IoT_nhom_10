@@ -56,7 +56,9 @@ export const STATE_TITLE = {
 };
 export const STATE_SHORT = { OPEN: 'Mở', CLOSING: 'Đang thu', CLOSED: 'Đã thu', OPENING: 'Đang mở', ERROR: 'Lỗi' };
 export const MODE_LABEL = { AUTO: 'Tự động', MANUAL: 'Thủ công' };
-export const RAIN_SOURCE_LABEL = { none: 'Không mưa', api: 'Open-Meteo', sim: 'Giả lập', local: 'Cảm biến tại chỗ' };
+export const RAIN_SOURCE_LABEL = {
+  none: 'Không mưa', api: 'Open-Meteo', sim: 'Giả lập', sensor: 'Cảm biến mưa', local: 'Độ ẩm và ánh sáng',
+};
 
 export const stateTitle = (s) => STATE_TITLE[s] ?? 'Không rõ';
 export const stateShort = (s) => STATE_SHORT[s] ?? '—';
@@ -69,10 +71,14 @@ export function rainReason(t) {
   switch (t.rain_source) {
     case 'api': return 'Có mưa hoặc sắp mưa theo Open-Meteo';
     case 'sim': return 'Đang giả lập mưa';
+    case 'sensor': return 'Cảm biến mưa báo tấm đang ướt';
     case 'local': return 'Không có dữ liệu thời tiết mới; độ ẩm cao và trời tối nên coi là mưa';
     default: return t.fail_safe ? 'Không có dữ liệu thời tiết mới; chưa thấy dấu hiệu mưa tại chỗ' : 'Không mưa';
   }
 }
+
+/** Giá trị ADC 12-bit 0..4095 thành phần trăm 0..100 (ngoài khoảng thì chặn lại). */
+export const adcPercent = (v) => Math.max(0, Math.min(100, Math.round(((v ?? 0) / 4095) * 100)));
 
 /** Ánh sáng 0..4095 (cao = sáng) thành nhãn và phần trăm. */
 export function lightLabel(light) {
@@ -82,7 +88,21 @@ export function lightLabel(light) {
   if (light < 3200) return 'Sáng';
   return 'Rất sáng';
 }
-export const lightPercent = (light) => Math.max(0, Math.min(100, Math.round(((light ?? 0) / 4095) * 100)));
+export const lightPercent = adcPercent;
+
+/**
+ * Cảm biến mưa (YL-83) trong telemetry: `{ wet, level }` hoặc null nếu thiết bị không có cảm biến / chưa đọc lần nào
+ * (firmware cũ không gửi hai trường này nên cũng ra null). `level` 0..4095, cao = ướt; `wet` là kết luận của firmware
+ * sau hai ngưỡng có độ trễ, giao diện không tự suy lại từ `level`.
+ */
+export function rainPlate(t) {
+  const level = Number.isFinite(t?.rain_level) ? t.rain_level : null;
+  const wet = typeof t?.rain_wet === 'boolean' ? t.rain_wet : null;
+  return level === null && wet === null ? null : { wet, level };
+}
+
+/** Những cảm biến thiết bị dựa vào khi mất dữ liệu thời tiết, để nói trong dải cảnh báo. */
+export const fallbackSensorsText = (t) => (rainPlate(t) ? 'cảm biến mưa, độ ẩm và ánh sáng' : 'độ ẩm và ánh sáng');
 
 /** RSSI (dBm) thành 0..4 vạch. */
 export function wifiBars(rssi) {

@@ -1,5 +1,5 @@
 // Điểm vào: nối store, API, WebSocket và các thẻ giao diện.
-import { createStore, applyMessage, commandTookEffect } from './store.js';
+import { createStore, applyMessage, commandTookEffect, mergeEvents } from './store.js';
 import { createApi, ApiError, wsUrl, connectEvents } from './api.js';
 import { commandErrorText } from './format.js';
 import { mountAwning } from './ui/awning.js';
@@ -49,7 +49,9 @@ async function loadWeather() {
   store.set({ weather: await api.getWeather() });
 }
 async function loadEvents() {
-  store.set({ events: await api.getEvents(50) });
+  const fetched = await api.getEvents(50);
+  // Gộp vào state ở thời điểm nhận được (không phải lúc gửi yêu cầu): trong lúc chờ, WebSocket có thể đã đẩy sự kiện mới.
+  store.set((st) => ({ events: mergeEvents(fetched, st.events) }));
 }
 async function loadHistory() {
   const hours = store.get().historyRange;

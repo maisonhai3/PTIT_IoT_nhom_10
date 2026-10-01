@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as f from '../js/format.js';
 
 const HCM = 'Asia/Ho_Chi_Minh';
@@ -55,14 +56,30 @@ test('nhãn trạng thái đủ cho mọi giá trị của contract', () => {
     assert.notEqual(f.stateShort(s), '—', s);
   }
   for (const m of ['AUTO', 'MANUAL']) assert.notEqual(f.modeLabel(m), '—');
-  for (const r of ['none', 'api', 'sim', 'local']) assert.notEqual(f.rainSourceLabel(r), '—');
+  for (const r of ['none', 'api', 'sim', 'sensor', 'local']) assert.notEqual(f.rainSourceLabel(r), '—');
   assert.equal(f.stateTitle('???'), 'Không rõ');
+});
+
+test('mọi giá trị rain_source trong docs/openapi.yaml đều có nhãn và lý do (thêm giá trị vào contract mà quên giao diện thì test này đỏ)', () => {
+  const yaml = readFileSync(new URL('../../docs/openapi.yaml', import.meta.url), 'utf8');
+  const m = yaml.match(/\n    RainSource:\n(?:      .*\n)*?      enum: \[([^\]]+)\]/);
+  assert.ok(m, 'không tìm thấy enum RainSource trong docs/openapi.yaml');
+  const values = m[1].split(',').map((x) => x.trim());
+  assert.deepEqual(Object.keys(f.RAIN_SOURCE_LABEL).sort(), [...values].sort(), 'nhãn và contract lệch nhau');
+  const reasons = new Set();
+  for (const v of values) {
+    assert.notEqual(f.rainSourceLabel(v), '—', v);
+    reasons.add(f.rainReason({ rain_source: v, fail_safe: false }));
+  }
+  assert.equal(reasons.size, values.length, 'mỗi nguồn phải có câu giải thích riêng');
+  assert.equal(new Set(values.map(f.rainSourceLabel)).size, values.length, 'hai nguồn không được trùng nhãn');
 });
 
 test('rainReason giải thích đúng nguồn', () => {
   assert.equal(f.rainReason(null), '');
   assert.match(f.rainReason({ rain_source: 'api' }), /Open-Meteo/);
   assert.match(f.rainReason({ rain_source: 'sim' }), /giả lập/);
+  assert.match(f.rainReason({ rain_source: 'sensor' }), /cảm biến mưa.*ướt/i);
   assert.match(f.rainReason({ rain_source: 'local' }), /độ ẩm cao/);
   assert.equal(f.rainReason({ rain_source: 'none', fail_safe: false }), 'Không mưa');
   assert.match(f.rainReason({ rain_source: 'none', fail_safe: true }), /không có dữ liệu thời tiết mới/i);
@@ -80,7 +97,22 @@ test('ánh sáng và WiFi', () => {
   assert.equal(f.lightPercent(0), 0);
   assert.equal(f.lightPercent(99999), 100);
   assert.equal(f.lightPercent(null), 0);
+  assert.equal(f.adcPercent(2048), 50);
+  assert.equal(f.adcPercent(-10), 0);
   assert.deepEqual([-40, -55, -56, -65, -75, -85, -86, null].map(f.wifiBars), [4, 4, 3, 3, 2, 1, 0, 0]);
+});
+
+test('cảm biến mưa trong telemetry', () => {
+  assert.deepEqual(f.rainPlate({ rain_level: 30, rain_wet: false }), { wet: false, level: 30 });
+  assert.deepEqual(f.rainPlate({ rain_level: 2600, rain_wet: true }), { wet: true, level: 2600 });
+  assert.deepEqual(f.rainPlate({ rain_level: 0, rain_wet: false }), { wet: false, level: 0 }, 'mức 0 là số đo hợp lệ, không phải "không có"');
+  assert.equal(f.rainPlate({ rain_level: null, rain_wet: null }), null, 'thiết bị không có cảm biến mưa');
+  assert.equal(f.rainPlate({}), null, 'firmware cũ không gửi hai trường này');
+  assert.equal(f.rainPlate(null), null);
+  assert.deepEqual(f.rainPlate({ rain_level: 120, rain_wet: null }), { wet: null, level: 120 }, 'thiếu một nửa thì vẫn hiện nửa còn lại');
+  assert.deepEqual(f.rainPlate({ rain_level: 'x', rain_wet: true }), { wet: true, level: null }, 'dữ liệu lạ không làm hỏng giao diện');
+  assert.match(f.fallbackSensorsText({ rain_level: 30, rain_wet: false }), /cảm biến mưa/);
+  assert.equal(f.fallbackSensorsText({ rain_level: null, rain_wet: null }), 'độ ẩm và ánh sáng');
 });
 
 test('nhật ký sự kiện thành câu', () => {
@@ -91,6 +123,8 @@ test('nhật ký sự kiện thành câu', () => {
   assert.equal(f.eventText({ kind: 'command', detail: 'close' }), 'Lệnh từ web: thu giàn');
   assert.equal(f.eventText({ kind: 'rain', detail: 'none' }), 'Hết mưa');
   assert.equal(f.eventText({ kind: 'rain', detail: 'sim' }), 'Có mưa (Giả lập)');
+  assert.equal(f.eventText({ kind: 'rain', detail: 'sensor' }), 'Có mưa (Cảm biến mưa)');
+  assert.equal(f.eventText({ kind: 'rain', detail: 'local' }), 'Có mưa (Độ ẩm và ánh sáng)');
   assert.equal(f.eventText({ kind: 'weather_error', detail: 'boom' }), 'Không lấy được thời tiết: boom');
   assert.equal(f.eventText({ kind: 'lạ', detail: 'x' }), 'lạ: x', 'kind lạ vẫn hiển thị được thay vì làm hỏng giao diện');
 });

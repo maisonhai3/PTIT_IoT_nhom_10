@@ -1,6 +1,7 @@
 // Huy hiệu trạng thái trên đầu trang và các dải cảnh báo.
 import { h, clear } from '../dom.js';
 import { icon } from '../icons.js';
+import { fallbackSensorsText } from '../format.js';
 
 function setChip(el, tone, iconName, text) {
   clear(el);
@@ -37,7 +38,7 @@ export function mountStatus({ store }) {
       items.push(['warn', 'warn', 'Thiết bị (ESP32) đang offline. ', 'Số liệu bên dưới là lần nhận cuối và chưa thể gửi lệnh.']);
     }
     if (t?.fail_safe && d?.online) {
-      items.push(['warn', 'warn', 'Thiết bị không có dữ liệu thời tiết mới ', '(chưa nhận được hoặc đã cũ hơn 30 phút). Nó đang dựa vào cảm biến tại chỗ (độ ẩm và ánh sáng) để quyết định.']);
+      items.push(['warn', 'warn', 'Thiết bị không có dữ liệu thời tiết mới ', `(chưa nhận được hoặc đã cũ hơn 30 phút). Nó đang dựa vào cảm biến tại chỗ (${fallbackSensorsText(t)}) để quyết định.`]);
     }
     if (t?.state === 'ERROR') {
       items.push(['bad', 'warn', 'Giàn báo lỗi: ', 'không chạm công tắc hành trình trong thời gian cho phép. Kiểm tra cơ cấu rồi bấm Mở hoặc Thu để thử lại.']);
