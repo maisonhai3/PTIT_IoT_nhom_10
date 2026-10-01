@@ -1,6 +1,7 @@
 # Sơ đồ nối dây (ESP32 DEVKIT V1, 30 chân)
 
 **Sơ đồ hình toàn mạch (30 dây, chia 7 giai đoạn):** [`wiring-diagram.svg`](wiring-diagram.svg) (bản PNG: [`wiring-diagram.png`](wiring-diagram.png)).
+**Trang tương tác** (xem từng giai đoạn, tick từng dây, có bước kiểm sau mỗi giai đoạn): tải [`wiring-guide.html`](wiring-guide.html) về hoặc clone repo rồi mở bằng trình duyệt (GitHub chỉ hiện mã nguồn của file HTML).
 Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở (DO, GND, VCC) trong hình là giả định (tài liệu kit không ghi).
 Thứ tự cực vít của relay (NC, COM, NO từ trái sang phải khi đặt board như hình) **đã kiểm trên board thật của nhóm**: bản vẽ đầu tiên đặt NO ở bên trái nên hai LED sáng sẵn lúc đứng yên.
 Luôn đọc nhãn in trên module.

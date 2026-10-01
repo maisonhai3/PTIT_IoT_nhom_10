@@ -4,7 +4,7 @@ Phần mềm đã được kiểm thử trên máy tính nhưng **chưa từng c
 Dừng ở bước đầu tiên không đúng và xem mục "Nếu không đúng". Tháo dây trước khi cắm/rút USB.
 
 ## 0. Chuẩn bị
-- Nối dây theo [`wiring.md`](wiring.md). **Chưa nối** tải nào ngoài LED qua điện trở 220 Ω.
+- Nối dây theo [`wiring.md`](wiring.md) (hoặc trang tương tác [`wiring-guide.html`](wiring-guide.html)). **Chưa nối** tải nào ngoài LED qua điện trở 220 Ω.
 - Máy chạy broker + backend đã chạy (`cd deploy && docker compose up -d --build`), và `docker compose ps` báo cả hai đang chạy.
 - `firmware/include/secrets.h` đã điền: SSID (WiFi 2,4 GHz), mật khẩu, `MQTT_HOST` = IP LAN của máy chạy broker, `MQTT_USER = esp32-awning01`, mật khẩu khớp `gen-passwd.sh`.
 - Lần đầu nên nạp bản demo để thấy phản ứng nhanh: `pio run -e esp32dev-demo -t upload` (xác nhận mưa 3 giây thay vì 30 giây, khô 20 giây thay vì 15 phút).

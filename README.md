@@ -41,7 +41,7 @@ Cần một máy luôn bật trong cùng mạng LAN với ESP32 (laptop, mini-PC
    docker compose up -d --build                    # web: http://<IP máy>:8080
    ```
    Không dùng Docker? Chạy Mosquitto tự cài với `deploy/mosquitto/mosquitto.conf` rồi `cd backend && go run ./cmd/server`.
-2. **ESP32**: nối dây theo [`docs/wiring.md`](docs/wiring.md), copy `firmware/include/secrets.h.example` thành `secrets.h` (WiFi, IP máy chạy broker, mật khẩu thiết bị),
+2. **ESP32**: nối dây theo [`docs/wiring.md`](docs/wiring.md) (hoặc mở trang tương tác `docs/wiring-guide.html` bằng trình duyệt), copy `firmware/include/secrets.h.example` thành `secrets.h` (WiFi, IP máy chạy broker, mật khẩu thiết bị),
    rồi nạp bằng PlatformIO. Chi tiết và cách hiệu chỉnh quang trở: [`firmware/README.md`](firmware/README.md).
 3. Mở web, chờ huy hiệu **Thiết bị: online**.
 
@@ -79,7 +79,7 @@ Kit ESP32 Basic Starter (board DEVKIT V1). **Không có** cảm biến mưa và 
 | [`firmware/`](firmware/README.md) | ESP32 (PlatformIO). Lõi điều khiển là C++ thuần, test được trên máy tính |
 | [`backend/`](backend/README.md) | API + MQTT + thời tiết + lịch sử (Go). Có ESP32 giả và broker nhúng cho demo/test |
 | [`frontend/`](frontend/README.md) | Website (JavaScript thuần, không cần build) |
-| [`docs/`](docs) | `openapi.yaml` (REST/WebSocket), `mqtt-topics.md`, `wiring.md` |
+| [`docs/`](docs) | `openapi.yaml` (REST/WebSocket), `mqtt-topics.md`, `wiring.md` (kèm `wiring-guide.html`, trang đi dây tương tác) |
 | [`deploy/`](deploy) | Docker Compose, cấu hình Mosquitto (mật khẩu + ACL theo từng topic) |
 
 **Contract** giữa các phần nằm ở `docs/`. Đổi contract thì báo cả nhóm; test của backend đối chiếu từng response với `docs/openapi.yaml`.
