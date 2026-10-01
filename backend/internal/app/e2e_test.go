@@ -81,7 +81,7 @@ func newRig(t *testing.T) *rig {
 	sim := devicesim.New(devicesim.Options{
 		BrokerURL: broker.URL(), Prefix: cfg.TopicPrefix, Every: 300 * time.Millisecond, Seed: 1,
 		Brain: devicesim.Config{
-			RainConfirm: 300 * time.Millisecond, DryConfirm: time.Second, ManualTimeout: 4 * time.Second,
+			RainConfirm: 300 * time.Millisecond, SensorConfirm: 300 * time.Millisecond, DryConfirm: time.Second, ManualTimeout: 4 * time.Second,
 			Travel: 400 * time.Millisecond, WeatherStale: 30 * time.Minute, FirstGrace: 2 * time.Minute,
 			HumidityHigh: 85, DarkBelow: 800,
 		},
@@ -251,20 +251,32 @@ func TestEndToEnd(t *testing.T) {
 	waitFor(t, "ws saw CLOSING and CLOSED", 3*time.Second, func() bool { return log.has("state", `"state":"CLOSING"`) && log.has("state", `"state":"CLOSED"`) })
 	waitFor(t, "ws saw the state event", 3*time.Second, func() bool { return log.has("event", `"detail":"CLOSED"`) })
 
-	// 5. Back to AUTO, open, then rain from the weather source closes it by itself.
+	// 5. Back to AUTO, open, then a rain forecast closes it by itself. Nothing falls yet, so the plate stays dry.
 	r.command("open")
 	r.waitTelemetry("open manually", func(tl *model.Telemetry) bool { return tl.State == model.StateOpen })
 	r.command("auto")
 	r.waitTelemetry("auto", func(tl *model.Telemetry) bool { return tl.Mode == model.ModeAuto })
 
-	r.setWeather(true, false)
-	r.waitTelemetry("auto-closed by rain", func(tl *model.Telemetry) bool {
-		return tl.State == model.StateClosed && tl.Mode == model.ModeAuto && tl.Rain && tl.RainSource == model.RainAPI
+	r.setWeather(false, true)
+	r.waitTelemetry("auto-closed by the forecast", func(tl *model.Telemetry) bool {
+		return tl.State == model.StateClosed && tl.Mode == model.ModeAuto && tl.Rain && tl.RainSource == model.RainAPI &&
+			tl.RainWet != nil && !*tl.RainWet && tl.RainLevel != nil && *tl.RainLevel < 200
 	})
 
-	// 6. Rain stops: after the dry confirmation the awning reopens by itself.
+	// 6. The forecast clears: after the dry confirmation the awning reopens by itself.
 	r.setWeather(false, false)
 	r.waitTelemetry("auto-reopened", func(tl *model.Telemetry) bool { return tl.State == model.StateOpen && !tl.Rain })
+
+	// 6b. Real rain wets the rain plate: the sensor becomes the reason and the numbers reach the web.
+	r.setWeather(true, false)
+	r.waitTelemetry("auto-closed by the rain plate", func(tl *model.Telemetry) bool {
+		return tl.State == model.StateClosed && tl.Mode == model.ModeAuto && tl.Rain && tl.RainSource == model.RainSensor &&
+			tl.RainWet != nil && *tl.RainWet && tl.RainLevel != nil && *tl.RainLevel >= 400
+	})
+	r.setWeather(false, false)
+	r.waitTelemetry("reopened once the plate dried", func(tl *model.Telemetry) bool {
+		return tl.State == model.StateOpen && !tl.Rain && tl.RainWet != nil && !*tl.RainWet
+	})
 
 	// 7. Simulated rain via command.
 	r.command("simulate_rain")
@@ -289,6 +301,13 @@ func TestEndToEnd(t *testing.T) {
 		if !kinds[k] {
 			t.Errorf("no %q event recorded; got %+v", k, events)
 		}
+	}
+	sawSensor := false
+	for _, e := range events {
+		sawSensor = sawSensor || (e.Kind == model.EventRain && e.Detail == string(model.RainSensor))
+	}
+	if !sawSensor {
+		t.Errorf("no rain event with the sensor as the source; got %+v", events)
 	}
 	code, b = r.call("GET", "/api/history?hours=1", "")
 	var hist []model.HistoryPoint

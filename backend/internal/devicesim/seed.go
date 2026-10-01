@@ -75,7 +75,7 @@ func SeedHistory(ctx context.Context, st store.Store, now time.Time, hours int, 
 				raining = true
 			}
 		}
-		s := env.Sample(t, raining)
+		s := env.Sample(t, Conditions{Rainy: raining}) // the history has no rain_level, so the plate is irrelevant
 		temp, hum := s.Temp, s.Humidity
 		src := model.RainNone
 		if raining {

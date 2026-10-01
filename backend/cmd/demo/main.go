@@ -28,7 +28,8 @@ func main() {
 		mqttAddr  = flag.String("mqtt", "127.0.0.1:1883", "address of the embedded MQTT broker (also usable by mosquitto_sub)")
 		static    = flag.String("static", "", "front-end directory (default: auto-detect ../frontend or ./frontend)")
 		rainCycle = flag.Duration("rain-cycle", 4*time.Minute, "period of the scripted weather (clear -> rain expected -> raining); 0 = always clear")
-		fast      = flag.Bool("fast", true, "short device timers (rain 3s, dry 20s) so the demo reacts quickly")
+		rainSkip  = flag.Duration("rain-offset", 0, "start the scripted weather this far into its cycle (with the default 4m cycle, -rain-offset=3m10s starts in the raining phase)")
+		fast      = flag.Bool("fast", true, "short device timers (forecast rain 3s, rain plate 2s, dry 20s) so the demo reacts quickly")
 		live      = flag.Bool("live-weather", false, "use the real Open-Meteo API instead of the scripted weather (needs Internet)")
 		noWeather = flag.Bool("no-weather", false, "the weather source always fails: see the UI without weather and the device's fail-safe")
 		seed      = flag.Bool("seed-history", true, "pre-fill 24 hours of plausible history (with three rain episodes) so the chart is not empty")
@@ -75,7 +76,7 @@ func main() {
 		log.Info("seeded demo history", "rows", n)
 	}
 
-	var wx weather.Client = &weather.Scripted{Location: "Demo (thời tiết giả lập)", Period: *rainCycle, Origin: time.Now()}
+	var wx weather.Client = &weather.Scripted{Location: "Demo (thời tiết giả lập)", Period: *rainCycle, Origin: time.Now().Add(-*rainSkip)}
 	// The scripted phases are short (the "rain expected" phase lasts 30s by default), so poll it often. The config
 	// validation floor (1 minute) protects the real Open-Meteo API, which does not apply to a local fake.
 	cfg.WeatherPollInterval = 10 * time.Second

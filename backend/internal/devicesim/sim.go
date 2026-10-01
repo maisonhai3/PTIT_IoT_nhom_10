@@ -105,7 +105,7 @@ func (s *Sim) Run(ctx context.Context) error {
 }
 
 func (s *Sim) sensorsLocked(now time.Time) Sensors {
-	return s.env.Sample(now, s.brain.EnvRaining())
+	return s.env.Sample(now, Conditions{Rainy: s.brain.EnvRaining(), PlateWet: s.brain.WorldRaining()})
 }
 
 func (s *Sim) publishTelemetry(mq mqttx.Client) {

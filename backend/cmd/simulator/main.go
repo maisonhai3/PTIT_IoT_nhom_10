@@ -22,7 +22,7 @@ func main() {
 		user   = flag.String("user", envOr("SIM_MQTT_USER", "esp32-awning01"), "MQTT user (the device's account)")
 		pass   = flag.String("pass", os.Getenv("SIM_MQTT_PASSWORD"), "MQTT password")
 		prefix = flag.String("prefix", envOr("MQTT_TOPIC_PREFIX", "pkg/awning01/"), "topic prefix")
-		fast   = flag.Bool("fast", true, "short timers (rain 3s, dry 20s, trip 4s) instead of the firmware's (30s, 15min, 8s)")
+		fast   = flag.Bool("fast", true, "short timers (forecast rain 3s, rain plate 2s, dry 20s, trip 4s) instead of the firmware's (30s, 5s, 15min, 8s)")
 		every  = flag.Duration("telemetry", 5*time.Second, "telemetry period")
 	)
 	flag.Parse()
