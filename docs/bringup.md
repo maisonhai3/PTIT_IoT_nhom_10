@@ -42,9 +42,11 @@ Nếu trống: serial có dòng `OLED not found at 0x3C`. Kiểm tra SDA = GPIO2
 1. Trên web bấm **Thu giàn**: relay CH1 phải kêu "tách", LED đỏ sáng khoảng 4 giây (bản demo; 8 giây bản thật), rồi tắt, web báo **Giàn đã thu**.
 2. Bấm **Mở giàn**: relay CH2 kêu, LED xanh sáng, rồi tắt.
 3. Trong lúc LED đỏ đang sáng, bấm nút "công tắc hành trình đã thu" (GPIO32): LED phải tắt **ngay** và trạng thái thành **Đã thu**.
-4. Hai LED **không bao giờ** cùng sáng, kể cả khi bạn bấm Thu rồi Mở liên tục.
+4. Lúc đứng yên (chưa bấm gì) cả hai LED **tắt**, và hai LED **không bao giờ** cùng sáng, kể cả khi bạn bấm Thu rồi Mở liên tục.
+   Cả hai sáng sẵn và chỉ tắt khi relay hút: dây LED đang ở đầu **NC**. Rút USB, chuyển mỗi dây sang đầu vít ngoài còn lại của kênh (bên kia chân giữa COM).
 
 **Nếu relay hoạt động ngược** (hút khi lẽ ra nhả, kêu ngay lúc cắm điện): module của bạn kích mức cao, đặt `RELAY_ACTIVE_LOW 0` và nạp lại.
+Phân biệt với lỗi dây NC ở mục 4: nhìn hai đèn nhỏ trên chính board relay lúc đứng yên. Chúng **tắt** mà LED của bạn sáng thì là dây ở NC; chúng **sáng** thì mới là kích ngược.
 
 ## 6. Luật tự động
 1. Bấm **Tự động**. Bật công tắc **Giả lập mưa** trên web (hoặc giữ nút GPIO25 ba giây): buzzer bíp ba tiếng, giàn tự thu ngay.

@@ -97,6 +97,7 @@ Lõi (`lib/awning_core`) chỉ nhận thời gian và đầu vào qua tham số,
 | Log `WiFi connecting` mãi | SSID/mật khẩu sai, hoặc WiFi 5 GHz (ESP32 chỉ 2.4 GHz) |
 | WiFi lên nhưng `MQTT connect failed, rc=-2` (hoặc `-4`) | Không tới được broker: sai IP, firewall chặn cổng 1883, hoặc WiFi bật **AP isolation** (WiFi trường/quán). Dùng hotspot điện thoại hoặc router riêng |
 | `rc=4` hoặc `rc=5` | Sai user/mật khẩu (`secrets.h` so với `deploy/mosquitto/passwd`), hoặc ACL từ chối |
+| Cả hai LED sáng sẵn lúc đứng yên, tắt khi relay hút | Dây LED đang ở đầu NC của relay: chuyển sang NO (đầu ngoài còn lại, bên kia chân giữa COM). Hai đèn nhỏ trên board relay tắt lúc đứng yên thì là lỗi dây này, không phải `RELAY_ACTIVE_LOW` |
 | Relay chạy ngược (hút khi lẽ ra nhả, kêu ngay lúc khởi động) | Đổi `RELAY_ACTIVE_LOW`. Module kích mức cao thì đặt 0 |
 | Serial in `OLED not found at 0x3C` | Kiểm tra SDA = GPIO21, SCL = GPIO22, VCC 3.3 V; thử `OLED_I2C_ADDR` 0x3D. Firmware vẫn chạy không cần OLED |
 | Nhiệt độ/độ ẩm `--` (telemetry `null`) | DHT11 lỗi 3 lần liên tiếp: kiểm tra dây DATA GPIO4 và nguồn 3.3 V |

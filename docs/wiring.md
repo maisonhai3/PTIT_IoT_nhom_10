@@ -1,8 +1,9 @@
 # Sơ đồ nối dây (ESP32 DEVKIT V1, 30 chân)
 
 **Sơ đồ hình toàn mạch (30 dây, chia 7 giai đoạn):** [`wiring-diagram.svg`](wiring-diagram.svg) (bản PNG: [`wiring-diagram.png`](wiring-diagram.png)).
-Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở (DO, GND, VCC) và thứ tự NO/COM/NC của relay trong hình là giả định
-(tài liệu kit không ghi): luôn đọc nhãn in trên module.
+Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở (DO, GND, VCC) trong hình là giả định (tài liệu kit không ghi).
+Thứ tự cực vít của relay (NC, COM, NO từ trái sang phải khi đặt board như hình) **đã kiểm trên board thật của nhóm**: bản vẽ đầu tiên đặt NO ở bên trái nên hai LED sáng sẵn lúc đứng yên.
+Luôn đọc nhãn in trên module.
 
 ![Sơ đồ đi dây toàn mạch](wiring-diagram.svg)
 
@@ -35,6 +36,12 @@ Mỗi kênh relay đóng cắt một LED, nên nghe được tiếng relay và t
 3.3V ──► COM (relay)      NO (relay) ──► điện trở 220Ω ──► LED (anode → cathode) ──► GND
 ```
 Kênh 1 dùng LED đỏ, kênh 2 dùng LED xanh lục. Về sau thay LED bằng motor DC + nguồn ngoài thì **không phải sửa firmware**.
+
+Dùng đầu **NO** (hở khi relay nghỉ), không dùng NC. **Lúc đứng yên cả hai LED phải tắt**; chỉ LED của kênh đang chạy mới sáng.
+Cả hai sáng sẵn và chỉ tắt khi relay hút nghĩa là dây LED đang ở NC: chuyển sang đầu ngoài còn lại của kênh (bên kia chân giữa COM).
+
+Vì sao NO: khi ESP32 mất điện, treo hoặc đang khởi động thì relay nhả, và tải phải **không có điện**. Với motor hai chiều, nối NC làm lúc nghỉ cả hai chiều cùng có điện;
+interlock trong firmware không cứu được vì nó chỉ chạy khi phần mềm đang chạy.
 
 ## Hiệu chỉnh quang trở
 Module quang trở của kit (LM393, 3 chân: DO, GND, VCC) **chỉ có ngõ số DO**, không có ngõ tương tự AO. DO chỉ ở hai mức, gần 0 V hoặc 3,3 V, tuỳ ánh sáng

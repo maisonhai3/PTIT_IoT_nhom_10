@@ -102,6 +102,7 @@ CI (`.github/workflows/ci.yml`) chạy các bước trên cùng kiểm tra trợ
 |---|---|
 | ESP32 nối WiFi được nhưng không thấy "Thiết bị: online" | WiFi trường/công cộng bật cách ly thiết bị (AP isolation): dùng hotspot điện thoại hoặc router riêng. Kiểm tra IP trong `secrets.h` và firewall cổng 1883 |
 | Đổi mạng là mất kết nối | IP máy chạy broker đổi: đặt DHCP reservation trên router |
+| Cả hai LED sáng sẵn lúc đứng yên, tắt khi relay hút | Dây LED nối vào đầu NC của relay thay vì NO: chuyển sang đầu ngoài còn lại, bên kia chân giữa COM (xem `docs/wiring.md`) |
 | Relay hút khi lẽ ra nhả (đảo ngược) | Module kích mức cao: đặt `RELAY_ACTIVE_LOW 0` trong `firmware/include/config.h` |
 | Giàn thu khi trời sáng, mở khi trời tối | Quang trở ngược cực tính: đặt `LDR_INVERT 1` (xem `docs/wiring.md`) |
 | Web báo "Mất kết nối tới máy chủ" | Backend tắt hoặc sai địa chỉ. Khi dev front-end trên server riêng: mở `?api=http://<backend>:8080` và đặt `CORS_ORIGINS` |
