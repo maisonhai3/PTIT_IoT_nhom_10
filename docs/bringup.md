@@ -12,6 +12,9 @@ Dừng ở bước đầu tiên không đúng và xem mục "Nếu không đúng
 - Cổng 1883 (broker) phải mở trên máy này cho mạng nhà: Windows hỏi cho phép thì chọn mạng Private, và mạng WiFi đang là Private chứ không phải Public.
   Cổng 8080 (web) chỉ cần mở nếu bạn muốn xem từ điện thoại.
 - `firmware/include/secrets.h` đã điền: SSID (WiFi 2,4 GHz), mật khẩu, `MQTT_HOST` = IP LAN của máy chạy broker, `MQTT_USER = esp32-awning01`, mật khẩu khớp `gen-passwd.sh`.
+- **Đang chạy bản cũ và vừa cập nhật code (có cảm biến mưa)?** Cập nhật **backend trước, firmware sau**: `git pull`, rồi `make up` để build lại image backend, rồi mới nạp firmware.
+  Backend cũ coi `rain_source: "sensor"` là không hợp lệ và bỏ cả bản tin, nên nếu nạp firmware mới trước thì lúc tấm cảm biến ướt web sẽ báo thiết bị offline sau khoảng 20 giây
+  (giàn vẫn tự thu vì vòng điều khiển không phụ thuộc mạng). Làm đúng thứ tự thì không có khoảng hở nào.
 - Lần đầu nên nạp bản demo để thấy phản ứng nhanh: `pio run -e esp32dev-demo -t upload` (xác nhận mưa 3 giây thay vì 30 giây, khô 20 giây thay vì 15 phút).
   Chạy thật thì dùng `pio run -t upload`.
 
