@@ -5,7 +5,7 @@
 
 // ---- Chân (docs/wiring.md) ----------------------------------------------------
 #define PIN_DHT 4            // DHT11 DATA
-#define PIN_LDR 34           // AO của module quang trở (ADC1, chỉ input)
+#define PIN_LDR 34           // DO (module 3 chân của kit) hoặc AO (module 4 chân) của quang trở; ADC1, chỉ input
 #define PIN_I2C_SDA 21       // OLED SSD1306
 #define PIN_I2C_SCL 22
 #define PIN_RELAY_CLOSE 26   // relay CH1: THU giàn
@@ -23,8 +23,8 @@
 // Relay của kit kích mức thấp: LOW = hút. Đặt 0 nếu dùng module kích mức cao.
 #define RELAY_ACTIVE_LOW 1
 
-// Firmware quy ước light: cao = sáng (0..4095). Nếu module quang trở của bạn cho AO
-// GIẢM khi sáng (che tối mà số tăng) thì đặt 1. Cách hiệu chỉnh: README.md, mục "Quang trở".
+// Firmware quy ước light: cao = sáng (0..4095). Nếu che tối mà light_raw TĂNG thì đặt 1
+// (module DO của kit thường cần 1). Cách hiệu chỉnh: docs/wiring.md, mục "Hiệu chỉnh quang trở".
 #define LDR_INVERT 0
 
 // ---- Ngưỡng fail-safe khi thời tiết từ backend đã cũ ---------------------------

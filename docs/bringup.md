@@ -34,9 +34,9 @@ Nếu trống: serial có dòng `OLED not found at 0x3C`. Kiểm tra SDA = GPIO2
 
 ## 4. Cảm biến
 - **DHT11**: `T=` và `H=` trong serial là số hợp lý (không phải `--`). Thổi hơi lên cảm biến, độ ẩm phải tăng trong vài giây.
-- **Quang trở** (quan trọng vì mỗi hãng một cực tính): che module bằng tay rồi chiếu đèn pin, quan sát `light_raw` trong serial.
-  Che tối mà `light_raw` **tăng** thì đặt `LDR_INVERT 1` trong `firmware/include/config.h` và nạp lại; sau đó `light` phải **giảm** khi che tối.
-  Rồi kiểm tra `LOCAL_DARK_BELOW` (mặc định 800) cao hơn giá trị lúc che tối một chút.
+- **Quang trở** (module 3 chân DO, GND, VCC: chỉ có ngõ số): vặn biến trở xanh trên module cho tới khi đèn DO đổi trạng thái đúng lúc bạn che cảm biến.
+  `light_raw` trong serial chỉ nhảy giữa hai mức (gần 0 và gần 4095). Che tối mà `light_raw` **tăng** thì đặt `LDR_INVERT 1` trong `firmware/include/config.h`
+  và nạp lại; sau đó `light` phải về gần 0 khi che tối. Chi tiết: `docs/wiring.md`, mục "Hiệu chỉnh quang trở".
 
 ## 5. Relay và công tắc hành trình (chưa có motor nên dùng LED)
 1. Trên web bấm **Thu giàn**: relay CH1 phải kêu "tách", LED đỏ sáng khoảng 4 giây (bản demo; 8 giây bản thật), rồi tắt, web báo **Giàn đã thu**.

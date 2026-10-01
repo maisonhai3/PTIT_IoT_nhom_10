@@ -59,11 +59,11 @@ Giữ nút GPIO25 3 giây để bật/tắt giả lập mưa ngay trên board (b
 - **OLED** (2 Hz): `DA MO` / `DANG THU` / `DA THU` / `DANG MO` / `LOI`, nhiệt độ, độ ẩm, ánh sáng, chế độ, nguồn mưa, tuổi bản tin, cờ WiFi/MQTT.
 
 ## Hiệu chỉnh quang trở
-Tài liệu kit không có module quang trở nên chưa biết cực tính. Quy ước của firmware: `light` cao = sáng (0..4095).
-1. Nạp firmware, mở serial monitor, xem `light_raw`.
-2. Che module bằng tay rồi chiếu đèn pin, xem số đổi thế nào.
-3. Che tối mà `light_raw` **tăng** thì đặt `LDR_INVERT` = 1 trong `include/config.h`, nạp lại. Khi đó `light` sẽ giảm khi che tối.
-4. Đặt `LOCAL_DARK_BELOW` cao hơn giá trị "che tối" một chút (mặc định 800).
+Module quang trở của kit chỉ có ngõ số **DO** (không có AO), nên `light_raw` chỉ ở gần 0 hoặc gần 4095. Quy ước của firmware: `light` cao = sáng.
+1. Vặn biến trở xanh trên module cho tới khi đèn DO đổi trạng thái đúng lúc bạn che cảm biến.
+2. Mở serial monitor, xem `light_raw` khi sáng và khi che.
+3. Che tối mà `light_raw` **tăng** thì đặt `LDR_INVERT` = 1 trong `include/config.h`, nạp lại. Khi đó `light` về gần 0 lúc tối.
+Chi tiết và cách dùng module có AO: [`docs/wiring.md`](../docs/wiring.md).
 
 ## Cấu hình (`include/config.h`)
 Mọi chân, ngưỡng, thời gian nằm ở đây. Các giá trị theo contract (30 s / 15 phút / 10 phút / 30 s / 200 ms / 30 phút / 2 phút / 85% / 800) phải khớp `docs/mqtt-topics.md`; sửa thì sửa cả hai nơi.
@@ -71,7 +71,7 @@ Mọi chân, ngưỡng, thời gian nằm ở đây. Các giá trị theo contra
 | Macro | Mặc định | Ý nghĩa |
 |---|---|---|
 | `RELAY_ACTIVE_LOW` | 1 | Relay của kit hút khi IN = LOW |
-| `LDR_INVERT` | 0 | Đảo cực tính quang trở |
+| `LDR_INVERT` | 0 | Đảo cực tính quang trở (module DO của kit thường cần 1) |
 | `SIM_TRAVEL_MS` | 8000 | Chưa có motor: coi như hành trình xong sau bấy nhiêu ms (công tắc hành trình vẫn có tác dụng sớm hơn). 0 = chỉ tin công tắc |
 | `TELEMETRY_PERIOD_MS` / `TELEMETRY_MIN_GAP_MS` | 5000 / 500 | Chu kỳ telemetry / khoảng cách tối thiểu giữa hai bản tin khi trạng thái đổi dồn dập |
 | `WDT_TIMEOUT_S` | 5 | Vòng điều khiển treo quá lâu thì reset về trạng thái relay tắt |

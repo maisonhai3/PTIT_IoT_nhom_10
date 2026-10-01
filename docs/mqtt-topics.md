@@ -29,7 +29,7 @@ Có xác thực user/password và ACL (`deploy/mosquitto/acl`). Prefix mọi top
   "uptime_s": 1234
 }
 ```
-- `temp`, `humidity`: `null` nếu DHT11 đọc lỗi. `light`: 0..4095, **cao = sáng** (firmware đã đảo cực tính nếu cần).
+- `temp`, `humidity`: `null` nếu DHT11 đọc lỗi. `light`: 0..4095, **cao = sáng** (firmware đã đảo cực tính nếu cần). Module quang trở của kit chỉ có ngõ số nên `light` chỉ ở gần 0 hoặc gần 4095.
 - `state`: `OPEN | CLOSING | CLOSED | OPENING | ERROR`. `mode`: `AUTO | MANUAL`.
 - `rain_source`: `none | api | sim | local`. `weather_age_s`: `-1` nếu chưa nhận bản tin thời tiết nào.
 - Không có `ts`: backend gán thời gian khi nhận.

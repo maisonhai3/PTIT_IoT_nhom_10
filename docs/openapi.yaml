@@ -158,7 +158,7 @@ components:
         ts: { type: string, format: date-time }
         temp: { type: number, nullable: true, description: "°C (DHT11); null nếu đọc lỗi" }
         humidity: { type: number, nullable: true, description: "% RH (DHT11); null nếu đọc lỗi" }
-        light: { type: integer, minimum: 0, maximum: 4095, description: "ADC 12-bit của quang trở đã chuẩn hoá: cao = sáng" }
+        light: { type: integer, minimum: 0, maximum: 4095, description: "ADC 12-bit của quang trở đã chuẩn hoá: cao = sáng. Module quang trở của kit chỉ có ngõ số nên giá trị chỉ gần 0 hoặc gần 4095" }
         state: { $ref: "#/components/schemas/AwningState" }
         mode: { $ref: "#/components/schemas/Mode" }
         rain: { type: boolean, description: "ESP32 đang coi là có mưa (trước khi qua bộ lọc thời gian)" }

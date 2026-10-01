@@ -1,7 +1,7 @@
 # Sơ đồ nối dây (ESP32 DEVKIT V1, 30 chân)
 
 **Sơ đồ hình toàn mạch (30 dây, chia 7 giai đoạn):** [`wiring-diagram.svg`](wiring-diagram.svg) (bản PNG: [`wiring-diagram.png`](wiring-diagram.png)).
-Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở và thứ tự NO/COM/NC của relay trong hình là giả định
+Các chân GPIO trong hình đã được đối chiếu với `firmware/include/config.h`. Thứ tự chân của module quang trở (DO, GND, VCC) và thứ tự NO/COM/NC của relay trong hình là giả định
 (tài liệu kit không ghi): luôn đọc nhãn in trên module.
 
 ![Sơ đồ đi dây toàn mạch](wiring-diagram.svg)
@@ -17,7 +17,7 @@ ADC2 (GPIO 0, 2, 4, 12–15, 25–27) **không đọc được khi bật WiFi**,
 | Linh kiện | Chân linh kiện | ESP32 | Ghi chú |
 |---|---|---|---|
 | DHT11 (module 3 chân) | DATA | GPIO4 | VCC 3.3V, GND. Module đã có trở kéo lên |
-| Module quang trở | AO | GPIO34 (ADC1) | VCC 3.3V. Cực tính tuỳ module, xem mục "Hiệu chỉnh quang trở" |
+| Module quang trở (3 chân: DO, GND, VCC) | **DO** | GPIO34 (ADC1) | VCC 3.3V. Module của kit **không có chân AO**, chỉ có ngõ số DO (0 V hoặc 3,3 V). Ngưỡng sáng/tối chỉnh bằng biến trở xanh trên module, xem mục "Hiệu chỉnh quang trở" |
 | OLED 0.96" SSD1306 | SDA / SCL | GPIO21 / GPIO22 | VCC 3.3V, địa chỉ 0x3C |
 | Relay CH1 (**thu** giàn) | IN1 | GPIO26 | VCC relay → **5V/VIN**, GND chung. Kích mức thấp (LOW = hút) |
 | Relay CH2 (**mở** giàn) | IN2 | GPIO27 | Như trên |
@@ -37,13 +37,18 @@ Mỗi kênh relay đóng cắt một LED, nên nghe được tiếng relay và t
 Kênh 1 dùng LED đỏ, kênh 2 dùng LED xanh lục. Về sau thay LED bằng motor DC + nguồn ngoài thì **không phải sửa firmware**.
 
 ## Hiệu chỉnh quang trở
-Tài liệu kit không có module quang trở nên chưa biết ngõ AO tăng hay giảm khi trời sáng (mỗi hãng một kiểu).
+Module quang trở của kit (LM393, 3 chân: DO, GND, VCC) **chỉ có ngõ số DO**, không có ngõ tương tự AO. DO chỉ ở hai mức, gần 0 V hoặc 3,3 V, tuỳ ánh sáng
+đang mạnh hơn hay yếu hơn ngưỡng đặt bằng **biến trở xanh** trên module. Vì vậy `light_raw` trong serial chỉ nhận hai giá trị (gần 0 và gần 4095), không đổi từ từ.
 Firmware quy ước `light` **cao = sáng** (0..4095). Cách hiệu chỉnh:
 
-1. Nạp firmware, mở serial monitor (115200). Firmware in `light_raw` mỗi giây.
-2. Che module bằng tay rồi chiếu đèn pin vào, quan sát số thay đổi thế nào.
-3. Nếu che tối mà số **tăng** thì đặt `LDR_INVERT = true` trong `firmware/include/config.h`.
-4. Đặt `LOCAL_DARK_BELOW` cao hơn giá trị "che tối" một chút (mặc định 800).
+1. Cấp nguồn. Trên module có hai đèn nhỏ: đèn nguồn và đèn DO (báo mức đầu ra).
+2. Vặn biến trở xanh bằng tua vít nhỏ cho tới khi đèn DO đổi trạng thái đúng lúc bạn che cảm biến bằng tay (hoặc tắt đèn phòng).
+3. Nạp firmware, mở serial monitor (115200), xem `light_raw` khi sáng và khi che.
+4. Nếu che tối mà `light_raw` **tăng** lên gần 4095 (thường gặp: DO lên mức cao khi tối) thì đặt `LDR_INVERT 1` trong `firmware/include/config.h`, nạp lại.
+   Khi đó `light` về gần 0 lúc tối. Che tối mà vẫn gần 0 thì ngưỡng chưa đúng: vặn tiếp biến trở.
+5. `LOCAL_DARK_BELOW` (mặc định 800) nằm giữa hai mức nên giữ nguyên.
+
+Muốn đo ánh sáng liên tục thì cần module có chân AO (loại 4 chân) hoặc quang trở rời có điện trở phân áp. Nối ngõ analog đó vào cùng GPIO34, không phải sửa code.
 
 ## An toàn
 - Chỉ dùng tải **DC điện áp thấp** qua relay. **Không nối điện 220V** khi chưa đủ hiểu biết/thiết bị bảo vệ.
