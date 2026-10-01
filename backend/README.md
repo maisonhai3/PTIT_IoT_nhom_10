@@ -17,7 +17,8 @@ go run ./cmd/demo          # broker MQTT nhúng + backend + ESP32 giả + thời
 # mở http://127.0.0.1:8080
 ```
 Chu kỳ thời tiết giả mặc định 4 phút: 2:30 nắng, 0:30 "sắp mưa", 1:00 đang mưa. Xem `go run ./cmd/demo -h`
-(`-rain-cycle 0` để luôn nắng, `-live-weather` để dùng Open-Meteo thật, `-token x` để thử token).
+(`-rain-cycle 0` để luôn nắng, `-rain-offset 3m10s` để bắt đầu ngay giữa pha mưa, `-live-weather` để dùng Open-Meteo thật, `-token x` để thử token).
+ESP32 giả có cả cảm biến mưa: tấm chỉ ướt khi thời tiết giả đang **mưa thật** (pha "đang mưa"), còn pha "sắp mưa" và nút Giả lập mưa thì tấm vẫn khô, y như trên board thật.
 
 ## Chạy thật
 ```bash
@@ -37,7 +38,7 @@ go run ./cmd/simulator     # (tuỳ chọn) ESP32 giả kết nối vào Mosquit
 | `internal/mqttx` | Client Paho: tự kết nối lại, tự subscribe lại; bản `Fake` cho test |
 | `internal/weather` | Client Open-Meteo, poller có backoff, bản `Scripted` cho demo |
 | `internal/store` | SQLite (thuần Go, không cần cgo) |
-| `internal/devicesim` | Mô phỏng hành vi firmware trên MQTT |
+| `internal/devicesim` | Mô phỏng hành vi firmware trên MQTT, gồm cảm biến mưa (hai ngưỡng có độ trễ, ưu tiên nguồn `sim` > `sensor` > `api` > `local`) |
 | `internal/embedbroker` | Broker MQTT nhúng (chỉ dùng cho demo/test) |
 | `internal/app` | Ghép các phần trên lại; chứa test end-to-end |
 

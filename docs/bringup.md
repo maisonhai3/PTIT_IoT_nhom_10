@@ -24,7 +24,7 @@ Dừng ở bước đầu tiên không đúng và xem mục "Nếu không đúng
 [net] WiFi up, ip=192.168.x.x rssi=-60
 [net] MQTT connecting to <IP broker>:1883
 [net] MQTT connected
-[ctl] light_raw=... light=... T=.. H=.. state=OPEN mode=AUTO rain=no src=none age=-1s ...   (mỗi giây)
+[ctl] light_raw=... light=... rain_level=0 wet=0 T=.. H=.. state=OPEN mode=AUTO rain=no src=none age=-1s ...   (mỗi giây)
 ```
 **Nếu không đúng:** xem bảng "Sự cố thường gặp" trong [`firmware/README.md`](../firmware/README.md). Hai lỗi hay gặp nhất là WiFi 5 GHz và
 WiFi trường có cách ly thiết bị (AP isolation): thử hotspot điện thoại.
@@ -52,6 +52,13 @@ Nếu trống: serial có dòng `OLED not found at 0x3C`. Kiểm tra SDA = GPIO2
 - **Quang trở** (module 3 chân DO, GND, VCC: chỉ có ngõ số): vặn biến trở xanh trên module cho tới khi đèn DO đổi trạng thái đúng lúc bạn che cảm biến.
   `light_raw` trong serial chỉ nhảy giữa hai mức (gần 0 và gần 4095). Che tối mà `light_raw` **tăng** thì đặt `LDR_INVERT 1` trong `firmware/include/config.h`
   và nạp lại; sau đó `light` phải về gần 0 khi che tối. Chi tiết: `docs/wiring.md`, mục "Hiệu chỉnh quang trở".
+- **Cảm biến mưa** (YL-83, AO → GPIO35; nối dây và hiệu chỉnh: `docs/wiring.md`, mục "Cảm biến mưa"):
+  1. Tấm khô: serial in `rain_level=` gần 0 và `wet=0`; trên web, ô "Cảm biến mưa" là **Khô**. Ghi lại số này.
+     Nếu in `rain_level=-` thì firmware được biên dịch không có cảm biến (`RAIN_SENSOR_ENABLED 0`).
+  2. Nhỏ vài giọt nước lên tấm (hoặc chạm ngón tay ẩm vào hai mảng đồng): `rain_level` phải tăng rõ rệt. Ghi lại số này.
+     Qua `RAIN_WET_ABOVE` (mặc định 400) thì `wet=1` và ô trên web chuyển **Ướt** sau tối đa vài giây.
+  3. Ướt đẫm tấm rồi lau khô: `rain_level` về gần 0 và `wet=0` (qua ngưỡng `RAIN_DRY_BELOW`, mặc định 200).
+  4. Dựa vào ba số ghi được để chỉnh `RAIN_WET_ABOVE` / `RAIN_DRY_BELOW` nếu cần, rồi nạp lại. Số ghi được ngược chiều (giảm khi ướt) thì đặt `RAIN_INVERT 1`.
 
 ## 5. Relay và công tắc hành trình (chưa có motor nên dùng LED)
 1. Trên web bấm **Thu giàn**: relay CH1 phải kêu "tách", LED đỏ sáng khoảng 4 giây (bản demo; 8 giây bản thật), rồi tắt, web báo **Giàn đã thu**.
@@ -65,11 +72,15 @@ Phân biệt với lỗi dây NC ở mục 4: nhìn hai đèn nhỏ trên chính
 
 ## 6. Luật tự động
 1. Bấm **Tự động**. Bật công tắc **Giả lập mưa** trên web (hoặc giữ nút GPIO25 ba giây): buzzer bíp ba tiếng, giàn tự thu ngay.
+   Giả lập mưa chỉ là cờ trong firmware: ô "Cảm biến mưa" trên web vẫn là **Khô** (tấm thật không ướt).
 2. Tắt giả lập mưa: bản demo tự mở lại sau khoảng 20 giây khô ráo (bản thật: 15 phút). Việc này cần backend lấy được thời tiết
    (thẻ "Thời tiết hiện tại" có số liệu); nếu máy chủ không ra được Internet thì thiết bị vào chế độ dự phòng và **giữ nguyên** thay vì tự mở.
-3. Tắt backend khoảng 1 phút (`docker compose stop backend`): board vẫn chạy (nút tay vẫn thu/mở được, luật tự động vẫn hoạt động theo bản tin thời tiết cuối);
+3. Cảm biến mưa: giữ chế độ **Tự động**, làm ướt tấm. Sau 5 giây (bản demo: 2 giây) buzzer bíp ba tiếng, giàn tự thu, và web ghi lý do **Cảm biến mưa báo tấm đang ướt**,
+   kể cả khi Open-Meteo đang báo không mưa. Lau khô tấm: giàn **chưa** tự mở ngay. Mở lại cần thời tiết còn mới báo không mưa **và** tấm khô liên tục 20 giây (bản thật: 15 phút);
+   tấm khô đơn thuần không đủ làm bằng chứng khi thiết bị không có dữ liệu thời tiết, vì có thể chỉ là chưa mưa ở chỗ cảm biến.
+4. Tắt backend khoảng 1 phút (`docker compose stop backend`): board vẫn chạy (nút tay vẫn thu/mở được, luật tự động vẫn hoạt động theo bản tin thời tiết cuối);
    bật lại thì web và board tự hồi phục.
-4. Rút nguồn ESP32: sau khoảng 20 giây web báo **Thiết bị: offline** và các nút điều khiển bị khóa.
+5. Rút nguồn ESP32: sau khoảng 20 giây web báo **Thiết bị: offline** và các nút điều khiển bị khóa.
 
 ## 7. Trước khi nối motor hoặc tải thật
 - Chỉ dùng tải **một chiều điện áp thấp** qua relay, nguồn ngoài riêng, nối chung GND với ESP32, diode chống dội song song motor. **Không** nối điện 220 V.

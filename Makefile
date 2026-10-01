@@ -20,10 +20,10 @@ test-frontend: ## Front-end: test logic thuần bằng node --test
 test-firmware: ## Firmware: test lõi C++ trên máy tính (cần PlatformIO: pip install platformio)
 	cd firmware && pio test -e native
 
-hostsim: ## Firmware thật build cho Linux + Mosquitto thật, 11 kịch bản (~7 phút; xem firmware/hostsim/README.md)
+hostsim: ## Firmware thật build cho Linux + Mosquitto thật, 13 kịch bản (~9 phút; xem firmware/hostsim/README.md)
 	cd firmware/hostsim && ./build.sh && python3 e2e.py
 
-hostsim-backend: ## Firmware thật + backend Go thật + Mosquitto thật + Open-Meteo giả (~4 phút)
+hostsim-backend: ## Firmware thật + backend Go thật + Mosquitto thật + Open-Meteo giả (~5 phút)
 	cd firmware/hostsim && ./build.sh && python3 with_backend.py
 
 e2e: ## Kiểm thử trình duyệt thật (cần: cd frontend && npm i && npx playwright install chromium)
