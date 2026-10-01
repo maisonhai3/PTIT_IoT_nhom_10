@@ -36,7 +36,7 @@ class Every {
 
 enum class State : uint8_t { Open, Closing, Closed, Opening, Error };
 enum class Mode : uint8_t { Auto, Manual };
-enum class RainSource : uint8_t { None, Api, Sim, Local };
+enum class RainSource : uint8_t { None, Api, Sim, Local, Sensor };
 enum class Action : uint8_t { Open, Close, Auto, SimulateRain, ClearRain };
 
 // Strings used on the wire (docs/mqtt-topics.md).
@@ -48,7 +48,7 @@ bool parseAction(const char* s, Action* out);
 
 // Bit flags returned by Controller::consumeEvents().
 enum Event : uint8_t {
-  EvChanged = 1,  // state/mode/rain/rainSource/failSafe changed: publish telemetry now
+  EvChanged = 1,  // state/mode/rain/rainSource/failSafe/rainSensorWet changed: publish telemetry now
   EvBeep = 2,     // automatic close just started
   EvAlarm = 4     // entered Error
 };
@@ -65,6 +65,11 @@ struct Config {
   uint32_t firstWeatherGraceMs = 120UL * 1000UL;
   float localHumidityHigh = 85.0f;
   int localDarkBelow = 800;
+  // Rain plate (docs/mqtt-topics.md): wet from rainWetAbove up, dry again from rainDryBelow down,
+  // unchanged in between. It must stay wet for sensorRainConfirmMs before the awning closes.
+  uint32_t sensorRainConfirmMs = 5UL * 1000UL;
+  int rainWetAbove = 400;
+  int rainDryBelow = 200;
 };
 
 struct Inputs {
@@ -74,6 +79,8 @@ struct Inputs {
   bool humidityValid = false;
   float humidity = 0.0f;
   int light = 0;  // 0..4095, high = bright (polarity already normalised)
+  bool rainSensorValid = false;  // false = no plate fitted / no reading yet: the sensor is ignored
+  int rainLevel = 0;             // 0..4095, high = wet (polarity already normalised)
 };
 
 struct Snapshot {
@@ -85,7 +92,8 @@ struct Snapshot {
   RainSource rainSource = RainSource::None;
   int32_t weatherAgeS = -1;  // -1 = never received
   bool failSafe = false;
-  uint32_t manualLeftS = 0;  // 0 in Auto
+  bool rainSensorWet = false;  // the plate's verdict after the hysteresis; false without a sensor
+  uint32_t manualLeftS = 0;    // 0 in Auto
 };
 
 class Controller {
@@ -137,6 +145,8 @@ class Controller {
   bool rainExpected_ = false;
   uint32_t weatherAgeMs_ = 0;
   uint32_t weatherRefMs_ = 0;
+
+  bool sensorWet_ = false;  // rain plate verdict with hysteresis
 
   Wet wet_ = Wet::Unknown;
   uint32_t wetSinceMs_ = 0;

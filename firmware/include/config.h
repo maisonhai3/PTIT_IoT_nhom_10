@@ -14,6 +14,7 @@
 #define PIN_LIMIT_OPEN 33    // công tắc hành trình "đã mở"
 #define PIN_BTN_MANUAL 25    // nút tay: bấm ngắn = đảo mở/thu, giữ 3 giây = giả lập mưa
 #define PIN_BUZZER 23        // buzzer chủ động, HIGH = kêu
+#define PIN_RAIN_AO 35       // AO của cảm biến mưa YL-83 (LM393); ADC1 (đọc được khi bật WiFi), chỉ input
 
 #define OLED_I2C_ADDR 0x3C
 #define OLED_WIDTH 128
@@ -27,6 +28,21 @@
 // (module DO của kit thường cần 1). Cách hiệu chỉnh: docs/wiring.md, mục "Hiệu chỉnh quang trở".
 #define LDR_INVERT 0
 
+// ---- Cảm biến mưa YL-83 (docs/wiring.md, mục "Cảm biến mưa") ---------------------
+#ifndef RAIN_SENSOR_ENABLED
+#define RAIN_SENSOR_ENABLED 1  // 0 = chưa gắn cảm biến mưa: firmware bỏ qua nó, telemetry gửi rain_level = null
+#endif
+#define RAIN_INVERT 0          // 0: AO giảm khi ướt (YL-83 thông thường). 1: AO tăng khi ướt
+// -1 = VCC của module nối thẳng ray 3V3. Muốn tấm đỡ bị ăn mòn thì nối VCC vào một chân GPIO còn trống
+// (đề xuất 18) và đặt số chân ở đây: firmware chỉ cấp điện trong lúc đo. Module chỉ ăn vài mA.
+#ifndef RAIN_PWR_PIN
+#define RAIN_PWR_PIN -1
+#endif
+// rain_level chuẩn hoá 0..4095, cao = ướt (gần 0 khi khô). Ướt từ RAIN_WET_ABOVE trở lên, khô lại từ
+// RAIN_DRY_BELOW trở xuống, ở giữa giữ kết luận cũ. Hiệu chỉnh: xem rain_level trong serial và trên web.
+#define RAIN_WET_ABOVE 400
+#define RAIN_DRY_BELOW 200
+
 // ---- Ngưỡng fail-safe khi thời tiết từ backend đã cũ ---------------------------
 #define LOCAL_DARK_BELOW 800    // light < ngưỡng này = trời tối
 #define LOCAL_HUMIDITY_HIGH 85  // độ ẩm >= ngưỡng này (%RH) = ẩm cao
@@ -35,11 +51,13 @@
 #ifdef DEMO_FAST_TIMERS
 // Bản demo: rút ngắn để thấy hết chu trình trong vài chục giây. KHÔNG dùng để chạy thật.
 #define RAIN_CONFIRM_MS 3000UL
+#define SENSOR_RAIN_CONFIRM_MS 2000UL
 #define DRY_CONFIRM_MS 20000UL
 #define MANUAL_TIMEOUT_MS 60000UL
 #define SIM_TRAVEL_MS 4000UL
 #else
 #define RAIN_CONFIRM_MS 30000UL      // mưa liên tục bấy nhiêu mới thu (sim mưa: thu ngay)
+#define SENSOR_RAIN_CONFIRM_MS 5000UL  // tấm cảm biến ướt liên tục bấy nhiêu mới thu (lọc giọt bắn)
 #define DRY_CONFIRM_MS 900000UL      // khô liên tục 15 phút mới mở lại
 #define MANUAL_TIMEOUT_MS 600000UL   // MANUAL tự về AUTO sau 10 phút
 // Chưa có motor: coi như hành trình kết thúc sau bấy nhiêu ms (công tắc hành trình vẫn
@@ -61,6 +79,9 @@
 #define DHT_MAX_FAILURES 3            // lỗi liên tiếp bấy nhiêu lần thì coi là mất số liệu
 #define LDR_SAMPLES 16                // số mẫu ADC lấy trung bình mỗi lần đọc
 #define LDR_PERIOD_MS 100UL
+#define RAIN_SAMPLES 16               // số mẫu ADC lấy trung bình mỗi lần đọc cảm biến mưa
+#define RAIN_PERIOD_MS 500UL
+#define RAIN_SETTLE_MS 20UL           // chờ module ổn định sau khi cấp điện (chỉ khi RAIN_PWR_PIN >= 0)
 #define OLED_PERIOD_MS 500UL          // 2 Hz
 #define SERIAL_LOG_PERIOD_MS 1000UL   // in light_raw để hiệu chỉnh quang trở
 
@@ -88,6 +109,9 @@
 // ---- Kiểm tra lúc biên dịch ---------------------------------------------------
 #if SIM_TRAVEL_MS > 0 && SIM_TRAVEL_MS >= TRAVEL_TIMEOUT_MS
 #error "SIM_TRAVEL_MS phai nho hon TRAVEL_TIMEOUT_MS, neu khong giang luon bi ERROR"
+#endif
+#if RAIN_DRY_BELOW >= RAIN_WET_ABOVE
+#error "RAIN_DRY_BELOW phai nho hon RAIN_WET_ABOVE (hai nguong cua cam bien mua co do tre)"
 #endif
 #if MQTT_SOCKET_TIMEOUT_S >= WDT_TIMEOUT_S
 #error "MQTT_SOCKET_TIMEOUT_S phai nho hon WDT_TIMEOUT_S"

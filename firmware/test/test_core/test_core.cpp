@@ -74,6 +74,11 @@ struct Rig {
     in.humidity = humidity;
     in.light = light;
   }
+  // Rain plate reading as the hardware layer delivers it: 0..4095, high = wet.
+  void plate(int level, bool valid = true) {
+    in.rainSensorValid = valid;
+    in.rainLevel = level;
+  }
 };
 
 }  // namespace
@@ -94,6 +99,7 @@ void test_strings_and_parse_action() {
   TEST_ASSERT_EQUAL_STRING("api", toString(RainSource::Api));
   TEST_ASSERT_EQUAL_STRING("sim", toString(RainSource::Sim));
   TEST_ASSERT_EQUAL_STRING("local", toString(RainSource::Local));
+  TEST_ASSERT_EQUAL_STRING("sensor", toString(RainSource::Sensor));
 
   const struct {
     const char* name;
@@ -134,6 +140,12 @@ void test_config_h_matches_contract() {
   TEST_ASSERT_EQUAL_UINT32(d.firstWeatherGraceMs, FIRST_WEATHER_GRACE_MS);
   TEST_ASSERT_EQUAL_FLOAT(d.localHumidityHigh, LOCAL_HUMIDITY_HIGH);
   TEST_ASSERT_EQUAL_INT(d.localDarkBelow, LOCAL_DARK_BELOW);
+  TEST_ASSERT_EQUAL_UINT32(d.sensorRainConfirmMs, SENSOR_RAIN_CONFIRM_MS);
+  TEST_ASSERT_EQUAL_INT(d.rainWetAbove, RAIN_WET_ABOVE);
+  TEST_ASSERT_EQUAL_INT(d.rainDryBelow, RAIN_DRY_BELOW);
+  TEST_ASSERT_EQUAL_INT(1, RAIN_SENSOR_ENABLED);
+  TEST_ASSERT_EQUAL_INT(0, RAIN_INVERT);
+  TEST_ASSERT_EQUAL_INT(-1, RAIN_PWR_PIN);
   TEST_ASSERT_EQUAL_UINT32(8000, SIM_TRAVEL_MS);
   TEST_ASSERT_EQUAL_UINT32(5000, TELEMETRY_PERIOD_MS);
   TEST_ASSERT_EQUAL_INT(1, RELAY_ACTIVE_LOW);
@@ -151,6 +163,7 @@ void test_config_h_matches_contract() {
   TEST_ASSERT_EQUAL_INT(33, PIN_LIMIT_OPEN);
   TEST_ASSERT_EQUAL_INT(25, PIN_BTN_MANUAL);
   TEST_ASSERT_EQUAL_INT(23, PIN_BUZZER);
+  TEST_ASSERT_EQUAL_INT(35, PIN_RAIN_AO);
 }
 #endif
 
@@ -168,6 +181,9 @@ void test_app_config_maps_every_field_to_the_documented_value() {
   TEST_ASSERT_EQUAL_UINT32(120000, c.firstWeatherGraceMs);
   TEST_ASSERT_EQUAL_FLOAT(85.0f, c.localHumidityHigh);
   TEST_ASSERT_EQUAL_INT(800, c.localDarkBelow);
+  TEST_ASSERT_EQUAL_UINT32(5000, c.sensorRainConfirmMs);
+  TEST_ASSERT_EQUAL_INT(400, c.rainWetAbove);
+  TEST_ASSERT_EQUAL_INT(200, c.rainDryBelow);
 }
 #endif
 
@@ -917,6 +933,241 @@ void test_sim_rain_hides_failsafe_and_wins_over_the_api() {
   ASSERT_SRC(RainSource::Api, r.snap());
 }
 
+// ---------------------------------------------------------------------------------
+// Rain plate (YL-83): physical evidence next to the forecast
+// ---------------------------------------------------------------------------------
+
+void test_plate_wet_closes_after_its_own_5s_confirm_with_beep() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);  // the forecast is dry: only the plate speaks
+  r.c.consumeEvents();
+  r.plate(500);
+  r.tick(0);  // wet observed right now
+  Snapshot s = r.snap();
+  TEST_ASSERT_TRUE(s.rainSensorWet);
+  TEST_ASSERT_TRUE(s.rain);
+  ASSERT_SRC(RainSource::Sensor, s);
+  ASSERT_STATE(State::Open, s);
+  TEST_ASSERT_TRUE(r.c.consumeEvents() & EvChanged);
+
+  r.run(4980);  // the plate has its own, shorter, confirm time than the 30 s of the forecast
+  ASSERT_STATE(State::Open, r.snap());
+  TEST_ASSERT_EQUAL_UINT8(0, r.c.consumeEvents());
+  r.tick(20);   // exactly 5 s of continuous wet plate
+  s = r.snap();
+  ASSERT_STATE(State::Closing, s);
+  ASSERT_MODE(Mode::Auto, s);
+  const uint8_t ev = r.c.consumeEvents();
+  TEST_ASSERT_TRUE(ev & EvBeep);
+  TEST_ASSERT_FALSE(ev & EvAlarm);
+}
+
+void test_plate_hysteresis_holds_the_verdict_between_the_thresholds() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);
+  // {level, wet expected}: wet from 400 up (inclusive), dry again from 200 down (inclusive).
+  const int steps[][2] = {{0, 0},   {399, 0}, {400, 1}, {399, 1}, {201, 1},
+                          {200, 0}, {399, 0}, {400, 1}, {4095, 1}, {201, 1}, {0, 0}};
+  for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {
+    r.plate(steps[i][0]);
+    r.tick();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(steps[i][1], r.snap().rainSensorWet ? 1 : 0, "plate verdict");
+  }
+}
+
+void test_plate_dry_again_reopens_only_after_the_dry_confirm_time() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);
+  r.plate(500);
+  r.tick(0);
+  r.run(5000);
+  ASSERT_STATE(State::Closing, r.snap());
+  r.run(9000);
+  ASSERT_STATE(State::Closed, r.snap());
+  r.c.consumeEvents();  // drop the beep of the automatic close
+
+  r.plate(0);  // the plate dried; the fresh dry forecast counts as DRY from this very moment
+  r.tick(0);
+  TEST_ASSERT_FALSE(r.snap().rain);
+  TEST_ASSERT_FALSE(r.snap().rainSensorWet);
+  r.run(15 * kMinute - 20);
+  ASSERT_STATE(State::Closed, r.snap());
+  r.tick(20);
+  ASSERT_STATE(State::Opening, r.snap());
+  TEST_ASSERT_FALSE(r.c.consumeEvents() & EvBeep);  // only the auto *close* beeps
+}
+
+void test_plate_wet_acts_before_any_weather_and_keeps_failsafe_flag_honest() {
+  Rig r(makeCfg(8000));
+  r.boot();  // no weather message yet: first-weather grace
+  r.plate(800);
+  r.tick(0);
+  Snapshot s = r.snap();
+  TEST_ASSERT_TRUE(s.rain);
+  ASSERT_SRC(RainSource::Sensor, s);
+  TEST_ASSERT_FALSE(s.failSafe);  // still inside the grace period
+  r.run(5000);
+  ASSERT_STATE(State::Closing, r.snap());
+  r.run(9000);
+  ASSERT_STATE(State::Closed, r.snap());
+
+  r.run(2 * kMinute);  // grace over, weather never arrived
+  s = r.snap();
+  TEST_ASSERT_TRUE(s.failSafe);  // the flag reports the weather feed, whatever the plate says
+  TEST_ASSERT_TRUE(s.rain);
+  ASSERT_SRC(RainSource::Sensor, s);
+
+  // A dry plate is no evidence of a dry forecast: with no weather the awning holds its position.
+  r.plate(0);
+  r.tick();
+  TEST_ASSERT_FALSE(r.snap().rain);
+  r.run(3 * 3600 * 1000UL, 1000);
+  ASSERT_STATE(State::Closed, r.snap());
+}
+
+void test_plate_is_named_before_the_forecast_and_after_the_simulation() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(true);
+  ASSERT_SRC(RainSource::Api, r.snap());
+  r.plate(500);
+  r.tick();
+  ASSERT_SRC(RainSource::Sensor, r.snap());  // physical evidence outranks the forecast
+  r.cmd(Action::SimulateRain);
+  r.tick();
+  ASSERT_SRC(RainSource::Sim, r.snap());
+  TEST_ASSERT_TRUE(r.snap().rainSensorWet);  // the plate verdict is reported even while simulating
+  r.cmd(Action::ClearRain);
+  r.tick();
+  ASSERT_SRC(RainSource::Sensor, r.snap());
+  r.plate(0);
+  r.tick();
+  ASSERT_SRC(RainSource::Api, r.snap());  // the forecast still says rain
+  r.weather(false);
+  TEST_ASSERT_FALSE(r.snap().rain);
+  ASSERT_SRC(RainSource::None, r.snap());
+}
+
+void test_plate_wet_shortens_a_pending_forecast_confirmation() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(true);  // forecast rain: needs 30 s
+  r.run(10000);
+  ASSERT_STATE(State::Open, r.snap());
+  r.plate(500);     // the run is already 10 s old, longer than the plate's 5 s
+  r.tick();
+  ASSERT_STATE(State::Closing, r.snap());
+  TEST_ASSERT_TRUE(r.c.consumeEvents() & EvBeep);
+}
+
+void test_plate_flicker_restarts_the_5s_confirmation() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);
+  r.plate(500);
+  r.tick(0);
+  r.run(4000);
+  r.plate(100);  // dry for one tick (a drop ran off)
+  r.tick();
+  TEST_ASSERT_FALSE(r.snap().rain);
+  r.plate(500);
+  r.tick(0);     // wet again: 5 s start over
+  r.run(4980);
+  ASSERT_STATE(State::Open, r.snap());
+  r.tick(20);
+  ASSERT_STATE(State::Closing, r.snap());
+}
+
+void test_plate_reading_is_ignored_when_invalid_and_verdict_clears() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);
+  r.plate(4095, false);  // no plate fitted / no reading yet
+  r.run(60000);
+  Snapshot s = r.snap();
+  TEST_ASSERT_FALSE(s.rain);
+  TEST_ASSERT_FALSE(s.rainSensorWet);
+  ASSERT_STATE(State::Open, s);
+
+  r.plate(4095, true);
+  r.tick();
+  TEST_ASSERT_TRUE(r.snap().rainSensorWet);
+  r.plate(4095, false);  // the reading went away: do not keep claiming a wet plate
+  r.tick();
+  TEST_ASSERT_FALSE(r.snap().rainSensorWet);
+  TEST_ASSERT_FALSE(r.snap().rain);
+}
+
+void test_plate_beats_the_local_humidity_rule_and_failsafe_stays_on() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false, false, 1790);  // stale in 10 s
+  r.humid(95, 100);               // humid and dark: would be the local fail-safe rule
+  r.plate(500);
+  r.tick(0);
+  ASSERT_SRC(RainSource::Sensor, r.snap());
+  TEST_ASSERT_FALSE(r.snap().failSafe);
+  r.run(11000);
+  const Snapshot s = r.snap();
+  TEST_ASSERT_TRUE(s.failSafe);
+  TEST_ASSERT_TRUE(s.rain);
+  ASSERT_SRC(RainSource::Sensor, s);  // not "local": the plate is the better witness
+  ASSERT_STATE(State::Closing, s);
+}
+
+void test_plate_verdict_change_is_announced_even_when_the_source_does_not_change() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.cmd(Action::SimulateRain);
+  r.tick();
+  r.c.consumeEvents();
+  r.plate(500);  // source stays "sim", but rain_wet flips: telemetry must go out now
+  r.tick();
+  ASSERT_SRC(RainSource::Sim, r.snap());
+  TEST_ASSERT_TRUE(r.c.consumeEvents() & EvChanged);
+  r.tick();
+  TEST_ASSERT_EQUAL_UINT8(0, r.c.consumeEvents());
+  r.plate(0);
+  r.tick();
+  TEST_ASSERT_TRUE(r.c.consumeEvents() & EvChanged);
+}
+
+void test_plate_wet_in_manual_mode_is_reported_and_acted_on_after_the_timeout() {
+  Rig r(makeCfg(8000));
+  r.boot();
+  r.weather(false);
+  r.cmd(Action::Open);  // manual, already open
+  r.plate(500);
+  r.tick(0);
+  r.run(60000);
+  Snapshot s = r.snap();
+  ASSERT_STATE(State::Open, s);
+  ASSERT_MODE(Mode::Manual, s);
+  TEST_ASSERT_TRUE(s.rain);
+  ASSERT_SRC(RainSource::Sensor, s);
+  r.run(10 * kMinute - 60000 - 20);
+  ASSERT_MODE(Mode::Manual, r.snap());
+  r.tick(20);  // manual timeout: back to AUTO, the plate has been wet for ages
+  s = r.snap();
+  ASSERT_MODE(Mode::Auto, s);
+  ASSERT_STATE(State::Closing, s);
+}
+
+void test_plate_confirmation_survives_the_millis_rollover() {
+  Rig r(makeCfg(8000), 0xFFFFFFFFu - 2000u);  // the wrap happens 2 s into the wet run
+  r.boot();
+  r.weather(false);
+  r.plate(500);
+  r.tick(0);
+  r.run(4980);
+  ASSERT_STATE(State::Open, r.snap());
+  r.tick(20);
+  ASSERT_STATE(State::Closing, r.snap());
+}
+
 void test_weather_age_saturates_instead_of_wrapping() {
   Rig r(makeCfg(8000));
   r.boot();
@@ -1128,7 +1379,7 @@ bool validTransition(State from, State to) {
 // How much of the state space the fuzzer really visited (guards against a vacuous run).
 struct Coverage {
   long errors = 0, alarms = 0, beeps = 0, changed = 0, reversals = 0, manualReverts = 0;
-  long sim = 0, api = 0, local = 0, failSafe = 0, errorLimitExit = 0, errorCmdExit = 0;
+  long sim = 0, api = 0, local = 0, sensor = 0, failSafe = 0, errorLimitExit = 0, errorCmdExit = 0;
   long closings = 0, openings = 0, closedReached = 0, openReached = 0;
 };
 Coverage g_cov;
@@ -1198,12 +1449,21 @@ struct Fuzzer {
 
     // 7. Events match the observable change.
     const bool visibleChange = s.state != prev.state || s.mode != prev.mode || s.rain != prev.rain ||
-                               s.rainSource != prev.rainSource || s.failSafe != prev.failSafe;
+                               s.rainSource != prev.rainSource || s.failSafe != prev.failSafe ||
+                               s.rainSensorWet != prev.rainSensorWet;
     TEST_ASSERT_EQUAL_INT(visibleChange, (ev & EvChanged) != 0);
     TEST_ASSERT_EQUAL_INT(prev.state != State::Error && s.state == State::Error, (ev & EvAlarm) != 0);
     if (ev & EvBeep) {  // the beep belongs to an automatic close, nothing else
       TEST_ASSERT_TRUE(call == CallUpdate);
       TEST_ASSERT_TRUE(s.state == State::Closing && s.mode == Mode::Auto && s.rain);
+    }
+
+    // 7b. The plate verdict: never without a valid reading; when it is wet and nobody simulates rain,
+    //     it is the named source (it outranks the forecast and the local rule).
+    if (call == CallUpdate && !rig.in.rainSensorValid) TEST_ASSERT_FALSE(s.rainSensorWet);
+    if (s.rainSensorWet) TEST_ASSERT_TRUE(s.rain);
+    if (call == CallUpdate && s.rainSensorWet) {  // sim_ may change between updates, the source follows at the next one
+      TEST_ASSERT_TRUE(s.rainSource == (rig.c.simulatingRain() ? RainSource::Sim : RainSource::Sensor));
     }
 
     // 8. update() starts a motion only through the automatic rule, and only leaves Error
@@ -1231,6 +1491,7 @@ struct Fuzzer {
     if (s.rain && s.rainSource == RainSource::Sim) ++g_cov.sim;
     if (s.rain && s.rainSource == RainSource::Api) ++g_cov.api;
     if (s.rain && s.rainSource == RainSource::Local) ++g_cov.local;
+    if (s.rain && s.rainSource == RainSource::Sensor) ++g_cov.sensor;
     if (s.failSafe) ++g_cov.failSafe;
     if (prev.state == State::Error && s.state != State::Error) {
       if (call == CallUpdate) ++g_cov.errorLimitExit; else ++g_cov.errorCmdExit;
@@ -1254,6 +1515,12 @@ struct Fuzzer {
     if (rng.chance(400)) in.humidityValid = rng.below(5) != 0;
     if (rng.chance(200)) in.humidity = static_cast<float>(40 + rng.below(61));
     if (rng.chance(200)) in.light = static_cast<int>(rng.below(4096));
+    if (rng.chance(500)) in.rainSensorValid = rng.below(6) != 0;
+    if (rng.chance(120)) {  // wet / dry spells, plus readings right around the two thresholds
+      const uint32_t pick = rng.below(4);
+      in.rainLevel = pick == 0 ? 0 : pick == 1 ? 4095 : pick == 2 ? static_cast<int>(rng.below(4096))
+                                                                  : static_cast<int>(190 + rng.below(220));
+    }
   }
 
   void randomEvents(int& phase) {
@@ -1335,6 +1602,7 @@ void test_fuzz_interlock_and_invariants() {
   TEST_ASSERT_TRUE(g_cov.reversals > 100);
   TEST_ASSERT_TRUE(g_cov.manualReverts > 100);
   TEST_ASSERT_TRUE(g_cov.sim > 1000 && g_cov.api > 1000 && g_cov.local > 1000 && g_cov.failSafe > 1000);
+  TEST_ASSERT_TRUE(g_cov.sensor > 1000);
   TEST_ASSERT_TRUE(g_cov.closings > 500 && g_cov.openings > 500);
   TEST_ASSERT_TRUE(g_cov.closedReached > 500 && g_cov.openReached > 500);
   TEST_ASSERT_TRUE(g_cov.changed > 1000);
@@ -1549,6 +1817,18 @@ int main(int, char**) {
   RUN_TEST(test_unknown_interrupts_wet_confirmation);
   RUN_TEST(test_no_weather_ever_never_moves_an_idle_awning);
   RUN_TEST(test_sim_rain_hides_failsafe_and_wins_over_the_api);
+  RUN_TEST(test_plate_wet_closes_after_its_own_5s_confirm_with_beep);
+  RUN_TEST(test_plate_hysteresis_holds_the_verdict_between_the_thresholds);
+  RUN_TEST(test_plate_dry_again_reopens_only_after_the_dry_confirm_time);
+  RUN_TEST(test_plate_wet_acts_before_any_weather_and_keeps_failsafe_flag_honest);
+  RUN_TEST(test_plate_is_named_before_the_forecast_and_after_the_simulation);
+  RUN_TEST(test_plate_wet_shortens_a_pending_forecast_confirmation);
+  RUN_TEST(test_plate_flicker_restarts_the_5s_confirmation);
+  RUN_TEST(test_plate_reading_is_ignored_when_invalid_and_verdict_clears);
+  RUN_TEST(test_plate_beats_the_local_humidity_rule_and_failsafe_stays_on);
+  RUN_TEST(test_plate_verdict_change_is_announced_even_when_the_source_does_not_change);
+  RUN_TEST(test_plate_wet_in_manual_mode_is_reported_and_acted_on_after_the_timeout);
+  RUN_TEST(test_plate_confirmation_survives_the_millis_rollover);
   RUN_TEST(test_weather_age_saturates_instead_of_wrapping);
   RUN_TEST(test_confirmation_survives_weeks_of_unchanged_weather);
   RUN_TEST(test_rollover_gives_identical_behaviour_at_any_start_time);

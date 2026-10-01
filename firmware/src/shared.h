@@ -15,6 +15,9 @@ struct SensorData {
   float humidity = 0.0f;
   int light = 0;     // normalised: high = bright
   int lightRaw = 0;  // raw ADC average, for LDR calibration
+  bool rainValid = false;  // a rain plate reading exists (never true when RAIN_SENSOR_ENABLED is 0)
+  int rainLevel = 0;       // normalised: 0..4095, high = wet
+  int rainRaw = 0;         // raw ADC average, for calibration
 };
 
 struct NetStatus {

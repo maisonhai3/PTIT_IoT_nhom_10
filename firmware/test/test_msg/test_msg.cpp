@@ -28,6 +28,9 @@ TelemetryData sample() {
   d.humidityValid = true;
   d.humidity = 71.0f;
   d.light = 2300;
+  d.rainSensorValid = true;
+  d.rainLevel = 30;
+  d.rainSensorWet = false;
   d.state = State::Open;
   d.mode = Mode::Auto;
   d.rain = false;
@@ -213,7 +216,8 @@ void test_parse_weather_fractional_and_huge_ages() {
 
 void test_telemetry_matches_the_documented_example_byte_for_byte() {
   TEST_ASSERT_EQUAL_STRING(
-      "{\"temp\":29.5,\"humidity\":71,\"light\":2300,\"state\":\"OPEN\",\"mode\":\"AUTO\","
+      "{\"temp\":29.5,\"humidity\":71,\"light\":2300,\"rain_level\":30,\"rain_wet\":false,"
+      "\"state\":\"OPEN\",\"mode\":\"AUTO\","
       "\"rain\":false,\"rain_source\":\"none\",\"weather_age_s\":45,\"fail_safe\":false,"
       "\"manual_left_s\":0,\"rssi\":-58,\"uptime_s\":1234}",
       format(sample()).c_str());
@@ -223,7 +227,7 @@ void test_telemetry_has_exactly_the_documented_keys_in_order() {
   JsonDocument doc;
   const std::string out = format(sample());
   TEST_ASSERT_TRUE(deserializeJson(doc, out) == DeserializationError::Ok);
-  const char* expected[] = {"temp", "humidity", "light", "state", "mode", "rain",
+  const char* expected[] = {"temp", "humidity", "light", "rain_level", "rain_wet", "state", "mode", "rain",
                             "rain_source", "weather_age_s", "fail_safe", "manual_left_s",
                             "rssi", "uptime_s"};
   const size_t n = sizeof(expected) / sizeof(expected[0]);
@@ -275,9 +279,9 @@ void test_telemetry_enum_spellings() {
     TEST_ASSERT_TRUE(deserializeJson(doc, format(d)) == DeserializationError::Ok);
     TEST_ASSERT_EQUAL_STRING(stateNames[i], doc["state"].as<const char*>());
   }
-  const RainSource srcs[] = {RainSource::None, RainSource::Api, RainSource::Sim, RainSource::Local};
-  const char* srcNames[] = {"none", "api", "sim", "local"};
-  for (int i = 0; i < 4; ++i) {
+  const RainSource srcs[] = {RainSource::None, RainSource::Api, RainSource::Sim, RainSource::Local, RainSource::Sensor};
+  const char* srcNames[] = {"none", "api", "sim", "local", "sensor"};
+  for (int i = 0; i < 5; ++i) {
     TelemetryData d = sample();
     d.rainSource = srcs[i];
     JsonDocument doc;
@@ -303,6 +307,8 @@ void test_telemetry_value_types() {
   TEST_ASSERT_TRUE(doc["temp"].is<float>());
   TEST_ASSERT_TRUE(doc["humidity"].is<int>());
   TEST_ASSERT_TRUE(doc["light"].is<int>());
+  TEST_ASSERT_TRUE(doc["rain_level"].is<int>());
+  TEST_ASSERT_TRUE(doc["rain_wet"].is<bool>());
   TEST_ASSERT_TRUE(doc["state"].is<const char*>());
   TEST_ASSERT_TRUE(doc["mode"].is<const char*>());
   TEST_ASSERT_TRUE(doc["rain"].is<bool>());
@@ -314,6 +320,40 @@ void test_telemetry_value_types() {
   TEST_ASSERT_TRUE(doc["manual_left_s"].is<int>());
   TEST_ASSERT_TRUE(doc["rssi"].is<int>());
   TEST_ASSERT_TRUE(doc["uptime_s"].is<int>());
+}
+
+void test_telemetry_rain_plate_fields() {
+  TelemetryData d = sample();
+  d.rainLevel = 2750;
+  d.rainSensorWet = true;
+  JsonDocument doc;
+  TEST_ASSERT_TRUE(deserializeJson(doc, format(d)) == DeserializationError::Ok);
+  TEST_ASSERT_EQUAL_INT(2750, doc["rain_level"].as<int>());
+  TEST_ASSERT_TRUE(doc["rain_wet"].as<bool>());
+
+  // The backend rejects a whole telemetry message whose rain_level is outside 0..4095: clamp instead.
+  d.rainLevel = 5000;
+  TEST_ASSERT_TRUE(format(d).find("\"rain_level\":4095,") != std::string::npos);
+  d.rainLevel = -7;
+  TEST_ASSERT_TRUE(format(d).find("\"rain_level\":0,") != std::string::npos);
+  d.rainLevel = 0;
+  d.rainSensorWet = false;
+  TEST_ASSERT_TRUE(format(d).find("\"rain_level\":0,\"rain_wet\":false,") != std::string::npos);
+}
+
+void test_telemetry_without_a_plate_has_null_rain_fields() {
+  TelemetryData d = sample();
+  d.rainSensorValid = false;  // not fitted, disabled at build time, or no reading yet
+  d.rainLevel = 999;          // ignored
+  d.rainSensorWet = true;     // ignored
+  JsonDocument doc;
+  const std::string out = format(d);
+  TEST_ASSERT_TRUE(deserializeJson(doc, out) == DeserializationError::Ok);
+  TEST_ASSERT_TRUE(doc["rain_level"].isNull());
+  TEST_ASSERT_TRUE(doc["rain_wet"].isNull());
+  TEST_ASSERT_TRUE(doc["rain_level"].is<JsonVariant>());  // the keys are still there, with null values
+  TEST_ASSERT_TRUE(doc["rain_wet"].is<JsonVariant>());
+  TEST_ASSERT_TRUE(out.find("\"light\":2300,\"rain_level\":null,\"rain_wet\":null,\"state\"") != std::string::npos);
 }
 
 void test_telemetry_number_formatting() {
@@ -403,6 +443,8 @@ int main(int, char**) {
   RUN_TEST(test_telemetry_never_seen_weather_is_minus_one);
   RUN_TEST(test_telemetry_enum_spellings);
   RUN_TEST(test_telemetry_value_types);
+  RUN_TEST(test_telemetry_rain_plate_fields);
+  RUN_TEST(test_telemetry_without_a_plate_has_null_rain_fields);
   RUN_TEST(test_telemetry_number_formatting);
   RUN_TEST(test_telemetry_fits_in_384_bytes_in_the_worst_case);
   RUN_TEST(test_telemetry_never_returns_truncated_json);

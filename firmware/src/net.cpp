@@ -140,6 +140,9 @@ bool publishTelemetry() {
   t.humidityValid = sd.humidityValid;
   t.humidity = sd.humidity;
   t.light = sd.light;
+  t.rainSensorValid = sd.rainValid;
+  t.rainLevel = sd.rainLevel;
+  t.rainSensorWet = snap.rainSensorWet;
   t.state = snap.state;
   t.mode = snap.mode;
   t.rain = snap.rain;

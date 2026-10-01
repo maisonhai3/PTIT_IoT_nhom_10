@@ -16,5 +16,8 @@ inline awning::Config appConfig() {
   c.firstWeatherGraceMs = FIRST_WEATHER_GRACE_MS;
   c.localHumidityHigh = LOCAL_HUMIDITY_HIGH;
   c.localDarkBelow = LOCAL_DARK_BELOW;
+  c.sensorRainConfirmMs = SENSOR_RAIN_CONFIRM_MS;
+  c.rainWetAbove = RAIN_WET_ABOVE;
+  c.rainDryBelow = RAIN_DRY_BELOW;
   return c;
 }

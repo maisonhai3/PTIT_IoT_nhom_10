@@ -66,6 +66,14 @@ size_t formatTelemetry(char* buf, size_t cap, const TelemetryData& d) {
   putNumber(doc, "temp", d.tempValid, d.temp);
   putNumber(doc, "humidity", d.humidityValid, d.humidity);
   doc["light"] = d.light;
+  if (d.rainSensorValid) {
+    // The backend rejects a message whose rain_level leaves 0..4095, so never send one that does.
+    doc["rain_level"] = d.rainLevel < 0 ? 0 : d.rainLevel > 4095 ? 4095 : d.rainLevel;
+    doc["rain_wet"] = d.rainSensorWet;
+  } else {
+    doc["rain_level"] = nullptr;
+    doc["rain_wet"] = nullptr;
+  }
   doc["state"] = toString(d.state);
   doc["mode"] = toString(d.mode);
   doc["rain"] = d.rain;

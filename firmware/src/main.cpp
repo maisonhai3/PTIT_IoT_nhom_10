@@ -55,9 +55,12 @@ void logStatus(const Snapshot& s, const SensorData& d, const NetStatus& n) {
   char hum[8] = "--";
   if (d.tempValid) snprintf(temp, sizeof(temp), "%.1f", d.temp);
   if (d.humidityValid) snprintf(hum, sizeof(hum), "%.0f", d.humidity);
-  // light_raw is what you need to calibrate LDR_INVERT / LOCAL_DARK_BELOW (see README).
-  Serial.printf("[ctl] light_raw=%d light=%d T=%s H=%s state=%s mode=%s rain=%s src=%s age=%ds fs=%d wifi=%d mqtt=%d\n",
-                d.lightRaw, d.light, temp, hum, awning::toString(s.state), awning::toString(s.mode),
+  // light_raw is what you need to calibrate LDR_INVERT / LOCAL_DARK_BELOW (see README);
+  // rain_level and wet are what you need to calibrate RAIN_WET_ABOVE / RAIN_DRY_BELOW ("-" = no plate).
+  char plate[24] = "rain_level=- wet=-";
+  if (d.rainValid) snprintf(plate, sizeof(plate), "rain_level=%d wet=%d", d.rainLevel, s.rainSensorWet ? 1 : 0);
+  Serial.printf("[ctl] light_raw=%d light=%d %s T=%s H=%s state=%s mode=%s rain=%s src=%s age=%ds fs=%d wifi=%d mqtt=%d\n",
+                d.lightRaw, d.light, plate, temp, hum, awning::toString(s.state), awning::toString(s.mode),
                 s.rain ? "yes" : "no", awning::toString(s.rainSource), static_cast<int>(s.weatherAgeS),
                 s.failSafe ? 1 : 0, n.wifi ? 1 : 0, n.mqtt ? 1 : 0);
 }
@@ -107,6 +110,8 @@ void controlTick(uint32_t now) {
   in.humidityValid = sensors.humidityValid;
   in.humidity = sensors.humidity;
   in.light = sensors.light;
+  in.rainSensorValid = sensors.rainValid;
+  in.rainLevel = sensors.rainLevel;
   g_controller.update(in);
   const Snapshot snap = g_controller.snapshot(now);
 

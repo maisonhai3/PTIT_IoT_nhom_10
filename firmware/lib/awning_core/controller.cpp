@@ -31,6 +31,7 @@ const char* toString(RainSource r) {
     case RainSource::Api: return "api";
     case RainSource::Sim: return "sim";
     case RainSource::Local: return "local";
+    case RainSource::Sensor: return "sensor";
     case RainSource::None: break;
   }
   return "none";
@@ -73,6 +74,7 @@ void Controller::begin(uint32_t nowMs, bool limitClosed, bool limitOpen) {
   weatherAgeMs_ = 0;
   weatherRefMs_ = nowMs;
 
+  sensorWet_ = false;
   wet_ = Wet::Unknown;
   wetSinceMs_ = nowMs;
   confirmed_ = false;
@@ -156,6 +158,22 @@ uint32_t Controller::weatherAgeMsAt(uint32_t now) const {
 
 void Controller::trackWetness(const Inputs& in) {
   const uint32_t now = in.nowMs;
+
+  // The rain plate: wet from rainWetAbove up, dry again from rainDryBelow down, unchanged in between.
+  // Without a valid reading there is no verdict at all: never keep claiming a wet plate.
+  if (!in.rainSensorValid) {
+    sensorWet_ = false;
+  } else if (!sensorWet_ && in.rainLevel >= cfg_.rainWetAbove) {
+    sensorWet_ = true;
+  } else if (sensorWet_ && in.rainLevel <= cfg_.rainDryBelow) {
+    sensorWet_ = false;
+  }
+
+  const bool weatherFresh = weatherKnown_ && weatherAgeMs_ <= cfg_.weatherStaleMs;
+  // Right after boot give the backend time to send the first message before falling back to local sensors.
+  const bool inGrace = !weatherKnown_ && elapsedMs(now, bootMs_) <= cfg_.firstWeatherGraceMs;
+  const bool weatherLost = !weatherFresh && !inGrace;
+
   Wet w = Wet::Unknown;
   RainSource src = RainSource::None;
   bool failSafe = false;
@@ -163,24 +181,25 @@ void Controller::trackWetness(const Inputs& in) {
   if (sim_) {
     w = Wet::Wet;
     src = RainSource::Sim;
-  } else if (weatherKnown_ && weatherAgeMs_ <= cfg_.weatherStaleMs) {
-    if (raining_ || rainExpected_) {
-      w = Wet::Wet;
-      src = RainSource::Api;
-    } else {
-      w = Wet::Dry;
-    }
   } else {
-    // Weather stale, or never received. Right after boot give the backend time to
-    // send the first message before falling back to local sensors.
-    const bool inGrace = !weatherKnown_ && elapsedMs(now, bootMs_) <= cfg_.firstWeatherGraceMs;
-    if (!inGrace) {
-      failSafe = true;
-      if (in.humidityValid && in.humidity >= cfg_.localHumidityHigh && in.light < cfg_.localDarkBelow) {
+    failSafe = weatherLost;  // reports the weather feed, whatever the plate says
+    if (sensorWet_) {
+      // Physical evidence: it counts with or without weather, and outranks the forecast and the local rule.
+      w = Wet::Wet;
+      src = RainSource::Sensor;
+    } else if (weatherFresh) {
+      if (raining_ || rainExpected_) {
         w = Wet::Wet;
-        src = RainSource::Local;
+        src = RainSource::Api;
+      } else {
+        w = Wet::Dry;
       }
+    } else if (weatherLost && in.humidityValid && in.humidity >= cfg_.localHumidityHigh &&
+               in.light < cfg_.localDarkBelow) {
+      w = Wet::Wet;
+      src = RainSource::Local;
     }
+    // Otherwise UNKNOWN: a dry plate says nothing about a missing forecast, so nothing is counted.
   }
 
   // Any change of the tri-state restarts the run; UNKNOWN therefore resets both timers.
@@ -190,8 +209,10 @@ void Controller::trackWetness(const Inputs& in) {
     confirmed_ = false;
   }
   if (!confirmed_ && w != Wet::Unknown) {
-    const uint32_t need =
-        w == Wet::Wet ? (src == RainSource::Sim ? 0u : cfg_.rainConfirmMs) : cfg_.dryConfirmMs;
+    uint32_t need = cfg_.dryConfirmMs;
+    if (w == Wet::Wet) {
+      need = src == RainSource::Sim ? 0u : src == RainSource::Sensor ? cfg_.sensorRainConfirmMs : cfg_.rainConfirmMs;
+    }
     if (elapsedMs(now, wetSinceMs_) >= need) confirmed_ = true;  // latched: immune to wrap-around
   }
 
@@ -274,6 +295,7 @@ Snapshot Controller::snapshot(uint32_t nowMs) const {
   s.rain = rain_;
   s.rainSource = rainSource_;
   s.failSafe = failSafe_;
+  s.rainSensorWet = sensorWet_;
   s.weatherAgeS = weatherKnown_ ? static_cast<int32_t>(weatherAgeMsAt(nowMs) / 1000u) : -1;
   if (mode_ == Mode::Manual) {
     const uint32_t e = elapsedMs(nowMs, manualSinceMs_);
@@ -286,7 +308,7 @@ Snapshot Controller::snapshot(uint32_t nowMs) const {
 uint32_t Controller::signature() const {
   return static_cast<uint32_t>(state_) | (static_cast<uint32_t>(mode_) << 3) |
          (static_cast<uint32_t>(rain_) << 4) | (static_cast<uint32_t>(rainSource_) << 5) |
-         (static_cast<uint32_t>(failSafe_) << 7);
+         (static_cast<uint32_t>(failSafe_) << 8) | (static_cast<uint32_t>(sensorWet_) << 9);
 }
 
 void Controller::noteChanges() {

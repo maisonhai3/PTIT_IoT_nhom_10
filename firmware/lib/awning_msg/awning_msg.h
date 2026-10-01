@@ -20,6 +20,10 @@ struct TelemetryData {
   bool humidityValid = false;
   float humidity = 0.0f;
   int light = 0;
+  // false = no plate fitted, disabled at build time, or no reading yet: rain_level and rain_wet are null.
+  bool rainSensorValid = false;
+  int rainLevel = 0;  // 0..4095, high = wet
+  bool rainSensorWet = false;
   State state = State::Open;
   Mode mode = Mode::Auto;
   bool rain = false;

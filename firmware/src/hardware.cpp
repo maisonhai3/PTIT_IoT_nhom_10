@@ -60,6 +60,46 @@ void readLdr() {
   g_sensors.light = g_lightAcc / 16;
 }
 
+#if RAIN_SENSOR_ENABLED
+// ---- rain plate (YL-83) -------------------------------------------------------
+
+awning::Every g_rainTimer(RAIN_PERIOD_MS);
+#if RAIN_PWR_PIN >= 0
+bool g_rainPowered = false;  // the module is on and settling; the reading is taken once RAIN_SETTLE_MS passed
+uint32_t g_rainPoweredAtMs = 0;
+#endif
+
+void sampleRain() {
+  uint32_t sum = 0;
+  for (int i = 0; i < RAIN_SAMPLES; ++i) sum += analogRead(PIN_RAIN_AO);
+  const int raw = static_cast<int>(sum / RAIN_SAMPLES);
+  const int level = RAIN_INVERT ? raw : 4095 - raw;  // contract: high = wet
+  g_sensors.rainRaw = raw;
+  g_sensors.rainLevel = level < 0 ? 0 : level > 4095 ? 4095 : level;
+  g_sensors.rainValid = true;
+}
+
+// Never blocks. With RAIN_PWR_PIN the module only has power for RAIN_SETTLE_MS around a reading
+// (the plate corrodes while it is wet and powered); the hysteresis and the confirm time live in the controller.
+void updateRain(uint32_t nowMs) {
+#if RAIN_PWR_PIN >= 0
+  if (!g_rainPowered) {
+    if (!g_rainTimer.due(nowMs)) return;
+    digitalWrite(RAIN_PWR_PIN, HIGH);
+    g_rainPowered = true;
+    g_rainPoweredAtMs = nowMs;
+    return;
+  }
+  if (awning::elapsedMs(nowMs, g_rainPoweredAtMs) < RAIN_SETTLE_MS) return;
+  sampleRain();
+  digitalWrite(RAIN_PWR_PIN, LOW);
+  g_rainPowered = false;
+#else
+  if (g_rainTimer.due(nowMs)) sampleRain();
+#endif
+}
+#endif  // RAIN_SENSOR_ENABLED
+
 // ---- buzzer -------------------------------------------------------------------
 
 enum class BeepPattern : uint8_t { None, Single, Triple };
@@ -107,6 +147,14 @@ void begin() {
 
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_LDR, ADC_11db);  // ~0..3.1 V: covers a 3.3 V divider
+#if RAIN_SENSOR_ENABLED
+  analogSetPinAttenuation(PIN_RAIN_AO, ADC_11db);  // AO swings between 0 V and VCC (3.3 V)
+#if RAIN_PWR_PIN >= 0
+  digitalWrite(RAIN_PWR_PIN, LOW);  // module off until the first reading
+  pinMode(RAIN_PWR_PIN, OUTPUT);
+  digitalWrite(RAIN_PWR_PIN, LOW);
+#endif
+#endif
 
   g_dht.begin();
   g_dhtTimer.startIn(millis(), 1500);  // DHT11 needs ~1 s after power-up
@@ -138,6 +186,9 @@ bool rawManualButton() { return digitalRead(PIN_BTN_MANUAL) == LOW; }
 
 void sensorsUpdate(uint32_t nowMs) {
   if (g_ldrTimer.due(nowMs)) readLdr();
+#if RAIN_SENSOR_ENABLED
+  updateRain(nowMs);
+#endif
   if (g_dhtTimer.due(nowMs)) readDht();
 }
 
