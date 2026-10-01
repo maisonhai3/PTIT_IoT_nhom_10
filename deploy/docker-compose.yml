@@ -2,9 +2,10 @@
 # Mosquitto: broker MQTT trong LAN. backend: API + giao diện web (http://<IP máy>:8080).
 services:
   mosquitto:
-    # Ghim phiên bản đã kiểm chứng đầy đủ (2.0.18). Thẻ "2" hiện trỏ tới 2.1.x: bản đó vẫn nạp được file mật khẩu và ACL ở đây
-    # (chỉ cảnh báo về quyền file, "future versions will refuse") nhưng chưa được kiểm thử như 2.0.18. Nâng cấp là một việc có chủ ý.
-    image: eclipse-mosquitto:2.0.18
+    # Ghim đúng bản đang chạy thật trên máy của nhóm (2.1.2): nạp được file mật khẩu và ACL ở đây, chỉ cảnh báo về quyền file
+    # ("future versions will refuse"). Các bộ kiểm thử tự động của repo chạy với Mosquitto 2.0.18. Nâng cấp là một việc có chủ ý.
+    # Từ 2.1 chỉ còn thẻ có hậu tố -alpine (không có thẻ "2.1.2" trơn).
+    image: eclipse-mosquitto:2.1.2-alpine
     container_name: awning-mosquitto
     restart: unless-stopped
     ports:
