@@ -33,6 +33,9 @@ WiFi trường có cách ly thiết bị (AP isolation): thử hotspot điện t
 Đi từng chặng, chặng nào không đúng thì dừng ở đó (ESP32 thử nối lại broker với khoảng chờ tăng dần từ 1 đến tối đa 30 giây; bấm **EN** trên board để thử lại ngay):
 1. **Gói tin tới broker:** `make logs` (hoặc `docker compose logs mosquitto` trong `deploy/`) có dòng `New client connected from <IP ESP32> as esp32-awning01`.
    Không có dòng nào: gói tin chưa tới broker (serial `MQTT connect failed, rc=-2`): sai `MQTT_HOST`, tường lửa chặn cổng 1883, hoặc WiFi có cách ly thiết bị.
+   Một lỗi khó thấy hơn: `MQTT_HOST` đúng, `make ps` báo broker chạy, backend nối được, nhưng ESP32 vẫn `rc=-2` sau khoảng 3 giây (không bị từ chối ngay).
+   Hãy so `ip route` với `docker network inspect deploy_default`: nếu dải của mạng Docker chứa dải của WiFi (hotspot iPhone là `172.20.10.0/28`, nằm trong `172.20.0.0/16`),
+   container không biết đường gửi trả lời ra WiFi. `docker-compose.yml` đã cố định mạng `172.29.202.0/24` để tránh lỗi này; nếu đang chạy bản cũ thì `make down` rồi `make up`.
    Có dòng `Client esp32-awning01 disconnected, not authorised`: sai mật khẩu (serial `rc=5`), xem bảng "Sự cố thường gặp" trong `firmware/README.md`.
 2. **Backend nối broker:** `make logs` có dòng `mqtt connected` của backend. Lệnh `curl http://localhost:8080/healthz` trả `"mqtt_connected":true`
    và, sau vài giây khi ESP32 gửi telemetry, `"device_online":true`.

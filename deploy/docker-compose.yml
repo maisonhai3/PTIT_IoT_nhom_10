@@ -2,8 +2,8 @@
 # Mosquitto: broker MQTT trong LAN. backend: API + giao diện web (http://<IP máy>:8080).
 services:
   mosquitto:
-    # Ghim đúng phiên bản đã kiểm chứng. Thẻ "2" hiện trỏ tới Mosquitto 2.1.x, bản chưa được thử với cấu hình này
-    # (từ 2.0.16 broker đã cảnh báo sẽ từ chối file mật khẩu/ACL không đúng chủ sở hữu hoặc quyền). Nâng cấp là một việc có chủ ý.
+    # Ghim phiên bản đã kiểm chứng đầy đủ (2.0.18). Thẻ "2" hiện trỏ tới 2.1.x: bản đó vẫn nạp được file mật khẩu và ACL ở đây
+    # (chỉ cảnh báo về quyền file, "future versions will refuse") nhưng chưa được kiểm thử như 2.0.18. Nâng cấp là một việc có chủ ý.
     image: eclipse-mosquitto:2.0.18
     container_name: awning-mosquitto
     restart: unless-stopped
@@ -40,3 +40,12 @@ services:
 volumes:
   mosquitto-data:
   backend-data:
+
+# Cố định mạng riêng của compose thay vì để Docker tự chọn một dải 172.x.0.0/16. Dải tự chọn có thể TRÙNG mạng WiFi
+# đang dùng (hotspot iPhone luôn là 172.20.10.0/28, nằm trong 172.20.0.0/16). Khi đó container coi mọi máy trong dải
+# ấy là "ở cùng mạng bridge", không gửi trả lời qua máy chủ, và ESP32 chỉ thấy MQTT rc=-2 dù broker vẫn chạy bình thường.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.202.0/24
