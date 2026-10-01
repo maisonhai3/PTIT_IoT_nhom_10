@@ -5,8 +5,9 @@ Dừng ở bước đầu tiên không đúng và xem mục "Nếu không đúng
 
 ## 0. Chuẩn bị
 - Nối dây theo [`wiring.md`](wiring.md) (hoặc trang tương tác [`wiring-guide.html`](wiring-guide.html)). **Chưa nối** tải nào ngoài LED qua điện trở 220 Ω.
-- Máy chạy broker + backend đã chạy, và `docker compose ps` báo cả hai đang chạy. Làm đúng thứ tự trong README, mục "Chạy thật":
-  `cd deploy && ./mosquitto/gen-passwd.sh`, rồi `cp ../backend/.env.example ../backend/.env` (điền `MQTT_PASSWORD`, toạ độ), rồi `docker compose up -d --build`.
+- Máy chạy broker + backend đã chạy, và `make ps` báo cả hai đang chạy. Làm đúng thứ tự trong README, mục "Chạy thật":
+  `cd deploy && ./mosquitto/gen-passwd.sh`, rồi `cp ../backend/.env.example ../backend/.env` (điền `MQTT_PASSWORD`, toạ độ), rồi `docker compose up -d --build` (hoặc `make up` từ thư mục gốc).
+  Lệnh `docker compose` chỉ chạy được trong `deploy/`, nơi có `docker-compose.yml`; ở thư mục khác sẽ báo `no configuration file provided: not found`.
   Phải có file mật khẩu **trước** khi chạy compose, nếu không Docker tạo ra một thư mục tên `passwd` và broker không khởi động được.
 - Cổng 1883 (broker) phải mở trên máy này cho mạng nhà: Windows hỏi cho phép thì chọn mạng Private, và mạng WiFi đang là Private chứ không phải Public.
   Cổng 8080 (web) chỉ cần mở nếu bạn muốn xem từ điện thoại.
@@ -30,10 +31,10 @@ WiFi trường có cách ly thiết bị (AP isolation): thử hotspot điện t
 
 ## 2. Backend thấy thiết bị
 Đi từng chặng, chặng nào không đúng thì dừng ở đó (ESP32 thử nối lại broker với khoảng chờ tăng dần từ 1 đến tối đa 30 giây; bấm **EN** trên board để thử lại ngay):
-1. **Gói tin tới broker:** `docker compose logs mosquitto` có dòng `New client connected from <IP ESP32> as esp32-awning01`.
+1. **Gói tin tới broker:** `make logs` (hoặc `docker compose logs mosquitto` trong `deploy/`) có dòng `New client connected from <IP ESP32> as esp32-awning01`.
    Không có dòng nào: gói tin chưa tới broker (serial `MQTT connect failed, rc=-2`): sai `MQTT_HOST`, tường lửa chặn cổng 1883, hoặc WiFi có cách ly thiết bị.
    Có dòng `Client esp32-awning01 disconnected, not authorised`: sai mật khẩu (serial `rc=5`), xem bảng "Sự cố thường gặp" trong `firmware/README.md`.
-2. **Backend nối broker:** `docker compose logs backend` có `mqtt connected`. Lệnh `curl http://localhost:8080/healthz` trả `"mqtt_connected":true`
+2. **Backend nối broker:** `make logs` có dòng `mqtt connected` của backend. Lệnh `curl http://localhost:8080/healthz` trả `"mqtt_connected":true`
    và, sau vài giây khi ESP32 gửi telemetry, `"device_online":true`.
 3. **Trình duyệt:** mở `http://<IP máy>:8080`: huy hiệu **Thiết bị: online**, ô "Cảm biến" có số liệu, trạng thái **Giàn đang mở**.
 

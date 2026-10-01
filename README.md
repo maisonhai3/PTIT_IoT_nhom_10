@@ -40,7 +40,8 @@ Cần một máy luôn bật trong cùng mạng LAN với ESP32 (laptop, mini-PC
    cp ../backend/.env.example ../backend/.env      # điền MQTT_USER=backend, MQTT_PASSWORD, toạ độ (WEATHER_LAT/LON)
    docker compose up -d --build                    # web: http://<IP máy>:8080
    ```
-   Kiểm tra: `docker compose ps` báo hai dịch vụ đang chạy, và `curl http://localhost:8080/healthz` trả `"mqtt_connected":true` (thêm `"device_online":true` khi ESP32 đã nối).
+   Mọi lệnh `docker compose` phải chạy trong thư mục `deploy/` (nơi có `docker-compose.yml`). Từ thư mục gốc dùng `make up`, `make ps`, `make logs`, `make down`.
+   Kiểm tra: `make ps` báo hai dịch vụ đang chạy, và `curl http://localhost:8080/healthz` trả `"mqtt_connected":true` (thêm `"device_online":true` khi ESP32 đã nối).
 
    Không dùng Docker? Cài Mosquitto 2.0.x, chép `deploy/mosquitto/mosquitto.conf` rồi đổi ba đường dẫn `/mosquitto/...` (file mật khẩu, ACL, thư mục dữ liệu) thành đường dẫn thật;
    hai file đầu phải đọc được bởi tài khoản chạy Mosquitto. Sau đó `cd backend && go run ./cmd/server`.

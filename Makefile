@@ -1,6 +1,6 @@
 # Lệnh tắt cho các việc hay làm. `make help` để xem danh sách.
 .DEFAULT_GOAL := help
-.PHONY: help demo test test-backend test-frontend test-firmware hostsim hostsim-backend e2e build up down
+.PHONY: help demo test test-backend test-frontend test-firmware hostsim hostsim-backend e2e build up down ps logs
 
 help: ## Liệt kê các lệnh
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -37,3 +37,9 @@ up: ## Chạy Mosquitto + backend bằng Docker (xem deploy/docker-compose.yml)
 
 down: ## Dừng Docker
 	cd deploy && docker compose down
+
+ps: ## Xem Mosquitto và backend có đang chạy không
+	cd deploy && docker compose ps
+
+logs: ## Xem log Mosquitto và backend (Ctrl+C để thoát)
+	cd deploy && docker compose logs -f --tail=50
