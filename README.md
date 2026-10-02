@@ -113,6 +113,7 @@ CI (`.github/workflows/ci.yml`) chạy các bước trên cùng kiểm tra trợ
 | Ô "Cảm biến mưa" luôn **Ướt** dù tấm khô (hoặc luôn Khô dù nhúng nước) | Sai nguồn hoặc dây AO, `RAIN_INVERT` sai, hoặc ngưỡng chưa hiệu chỉnh: xem `docs/wiring.md`, mục "Cảm biến mưa" và bảng sự cố trong `firmware/README.md` |
 | Web báo "Mất kết nối tới máy chủ" | Backend tắt hoặc sai địa chỉ. Khi dev front-end trên server riêng: mở `?api=http://<backend>:8080` và đặt `CORS_ORIGINS` |
 | Nút điều khiển bị khóa | Thiết bị offline (lệnh không được giữ lại trên broker nên không gửi được) |
+| Tấm cảm biến mưa ướt, giàn thu, nhưng web đứng yên rồi báo "Thiết bị (ESP32) đang offline" (serial vẫn `mqtt=1`) | Backend đang chạy là bản cũ: nó coi `rain_source: "sensor"` là không hợp lệ và bỏ cả bản tin, nên `last_seen` không đổi. `make logs` có dòng `ignoring invalid message ... invalid rain_source "sensor"`. Cập nhật code rồi `make up` để build lại image backend (lịch sử trong volume được giữ nguyên). Backend mới thì web có ô "Cảm biến mưa" |
 | Thẻ thời tiết trống | Máy chủ không ra được Internet (Open-Meteo). Sau 2 phút thiết bị vào chế độ dự phòng |
 
 ## Những điều đã kiểm chứng và chưa kiểm chứng

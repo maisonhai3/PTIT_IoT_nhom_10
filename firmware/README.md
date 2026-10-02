@@ -123,6 +123,7 @@ Lõi (`lib/awning_core`) chỉ nhận thời gian và đầu vào qua tham số,
 | `rain_level` luôn gần 4095, `wet=1` khi tấm khô | `RAIN_INVERT` sai (module có AO tăng khi ướt thì đặt 1; ngược lại để 0), hoặc AO bị hở mạch/chân GPIO35 nổi. Nếu dùng `RAIN_PWR_PIN` thì module đang không có điện lúc đo |
 | Tấm khô mà `rain_level` dao động quanh ngưỡng, giàn thu rồi mở liên tục | Hai ngưỡng quá sát nhau hoặc tấm còn ẩm/đọng nước: tăng khoảng hở giữa `RAIN_WET_ABOVE` và `RAIN_DRY_BELOW`, đặt tấm nghiêng hơn |
 | Lau khô tấm mà giàn không tự mở | Thiết bị chưa nhận thời tiết mới (`age` lớn hoặc `fs=1`): tấm khô không đủ làm bằng chứng. Kiểm tra backend và Open-Meteo |
+| Giàn thu vì tấm ướt nhưng web đứng yên rồi báo thiết bị offline, trong khi serial vẫn `mqtt=1` | Backend cũ không biết `rain_source: "sensor"` và bỏ cả bản tin. Chạy lại backend bản mới (`make up`) trước khi nạp firmware có cảm biến mưa; xem `docs/bringup.md` mục 0 |
 | Trời tối mà `rain_source` không thành `local` | Chỉ áp dụng khi thời tiết đã cũ. Kiểm tra `light_raw` và `LDR_INVERT` |
 | Giàn báo `ERROR` khi `SIM_TRAVEL_MS = 0` | 30 s không chạm công tắc hành trình: bấm công tắc, hoặc gửi `open`/`close`, hoặc bấm nút tay |
 | Board tự reset lặp lại | Xem lý do reset lúc khởi động (`brownout` = nguồn USB yếu, `task_wdt` = vòng điều khiển treo) |
